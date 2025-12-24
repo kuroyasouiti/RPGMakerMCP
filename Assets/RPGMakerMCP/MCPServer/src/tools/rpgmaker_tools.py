@@ -74,30 +74,46 @@ rpgmaker_database_schema = _schema_with_required(
                     "backupDatabase",
                     "restoreDatabase",
                 ],
-                "description": "Database operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+                "description": (
+                    "Database operation. "
+                    "Recommended: 'list*' (lightweight UUID list) + 'get*ById' (full data by UUID). "
+                    "Deprecated: 'get*' (all records) - use list + getById instead for large datasets."
+                ),
             },
             "uuId": {
                 "type": "string",
-                "description": "UUID of the record to access (for get/update/delete operations).",
+                "description": "UUID of the record. Required for getById/update/delete operations.",
             },
             "filename": {
                 "type": "string",
-                "description": "Filename for the database item (without extension). Used as target file for create operations.",
+                "description": (
+                    "Target JSON filename (without extension) for create operations. "
+                    "Optional - defaults to 'characterActor', 'item', or 'animation' based on operation."
+                ),
             },
             "itemData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Data for creating/updating database items.",
+                "description": (
+                    "Item data for create/update. "
+                    "If 'uuId' is omitted, it will be auto-generated on create."
+                ),
             },
             "characterData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Character data for creating/updating.",
+                "description": (
+                    "Character data for create/update. "
+                    "If 'uuId' is omitted, it will be auto-generated on create."
+                ),
             },
             "animationData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Animation data for creating/updating.",
+                "description": (
+                    "Animation data for create/update. "
+                    "If 'id' is omitted, it will be auto-generated on create."
+                ),
             },
             "settingData": {
                 "type": "object",
@@ -106,7 +122,7 @@ rpgmaker_database_schema = _schema_with_required(
             },
             "exportPath": {
                 "type": "string",
-                "description": "Path for exporting database.",
+                "description": "Path for exporting database. Optional - defaults to project root.",
             },
             "importPath": {
                 "type": "string",
@@ -114,7 +130,7 @@ rpgmaker_database_schema = _schema_with_required(
             },
             "backupPath": {
                 "type": "string",
-                "description": "Path for backup/restore operations.",
+                "description": "Path for backup/restore operations. Optional for backup.",
             },
             **PAGINATION_PROPERTIES,
         },
@@ -161,33 +177,46 @@ rpgmaker_map_schema = _schema_with_required(
                     "exportMap",
                     "importMap",
                 ],
-                "description": "Map operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+                "description": (
+                    "Map operation. "
+                    "Recommended: 'list*' (lightweight UUID list) + 'get*ById' (full data by UUID). "
+                    "Deprecated: 'get*' (all records) - use list + getById instead for large datasets."
+                ),
             },
             "uuId": {
                 "type": "string",
-                "description": "UUID of the map record to access (for get/update/delete operations).",
+                "description": "UUID of the map/event record. Required for getById/update/delete operations.",
             },
             "filename": {
                 "type": "string",
-                "description": "Map filename (without extension). Used as target file for create operations.",
+                "description": (
+                    "Target JSON filename (without extension) for create operations. "
+                    "Optional - defaults to 'mapInfo'."
+                ),
             },
             "mapData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Map data for creating/updating.",
+                "description": (
+                    "Map data for create/update. "
+                    "If 'id' is omitted, it will be auto-generated on create."
+                ),
             },
             "eventId": {
                 "type": "string",
-                "description": "Event ID for event operations.",
+                "description": "Event UUID for map event operations.",
             },
             "eventData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Event data for creating/updating.",
+                "description": (
+                    "Map event data for create/update. "
+                    "If 'id' is omitted, it will be auto-generated on create."
+                ),
             },
             "tilesetId": {
                 "type": "string",
-                "description": "Tileset ID for tileset operations.",
+                "description": "Tileset UUID for tileset operations.",
             },
             "settings": {
                 "type": "object",
@@ -204,7 +233,7 @@ rpgmaker_map_schema = _schema_with_required(
             },
             "exportPath": {
                 "type": "string",
-                "description": "Export path for map export.",
+                "description": "Export path for map export. Optional.",
             },
             "importFilePath": {
                 "type": "string",
@@ -249,20 +278,30 @@ rpgmaker_event_schema = _schema_with_required(
                     "moveEvent",
                     "validateEvent",
                 ],
-                "description": "Event operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+                "description": (
+                    "Event operation. "
+                    "Recommended: 'list*' (lightweight UUID list) + 'get*ById' (full data by UUID). "
+                    "Deprecated: 'get*' (all records) - use list + getById instead for large datasets."
+                ),
             },
             "uuId": {
                 "type": "string",
-                "description": "UUID of the event record to access (for get/update/delete operations).",
+                "description": "UUID of the event record. Required for getById/update/delete/command/page operations.",
             },
             "filename": {
                 "type": "string",
-                "description": "Event filename (without extension). Used as target file for create operations.",
+                "description": (
+                    "Target JSON filename (without extension) for create operations. "
+                    "Optional - defaults to 'commonEvent'."
+                ),
             },
             "eventData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Event data for creating/updating.",
+                "description": (
+                    "Event data for create/update. "
+                    "If 'id' is omitted, it will be auto-generated on create."
+                ),
             },
             "pageIndex": {
                 "type": "integer",
@@ -334,15 +373,22 @@ rpgmaker_battle_schema = _schema_with_required(
                     "getBattleAnimations",
                     "updateBattleAnimation",
                 ],
-                "description": "Battle system operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+                "description": (
+                    "Battle system operation. "
+                    "Recommended: 'list*' (lightweight UUID list) + 'get*ById' (full data by UUID). "
+                    "Deprecated: 'get*' (all records) - use list + getById instead for large datasets."
+                ),
             },
             "uuId": {
                 "type": "string",
-                "description": "UUID of the battle item to access (for get/update/delete operations).",
+                "description": "UUID of the battle record. Required for getById/update/delete operations.",
             },
             "filename": {
                 "type": "string",
-                "description": "Filename for the battle item (without extension). Used as target file for create operations.",
+                "description": (
+                    "Target JSON filename (without extension) for create operations. "
+                    "Optional - defaults to 'enemy', 'troop', or 'skill' based on operation."
+                ),
             },
             "settingData": {
                 "type": "object",
@@ -352,17 +398,26 @@ rpgmaker_battle_schema = _schema_with_required(
             "enemyData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Enemy data for creating/updating.",
+                "description": (
+                    "Enemy data for create/update. "
+                    "If 'uuId' is omitted, it will be auto-generated on create."
+                ),
             },
             "troopData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Troop data for creating/updating.",
+                "description": (
+                    "Troop data for create/update. "
+                    "If 'uuId' is omitted, it will be auto-generated on create."
+                ),
             },
             "skillData": {
                 "type": "object",
                 "additionalProperties": True,
-                "description": "Skill data for creating/updating.",
+                "description": (
+                    "Skill data for create/update. "
+                    "If 'uuId' is omitted, it will be auto-generated on create."
+                ),
             },
             "animationData": {
                 "type": "object",
@@ -405,6 +460,12 @@ rpgmaker_system_schema = _schema_with_required(
                 "description": "Variable ID for variable operations.",
             },
             "value": {
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"},
+                    {"type": "integer"},
+                ],
                 "description": "Value to set for variable/switch operations.",
             },
             "switchId": {
@@ -462,27 +523,35 @@ rpgmaker_assets_schema = _schema_with_required(
                     "backupAssets",
                     "restoreAssets",
                 ],
-                "description": "Asset operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+                "description": (
+                    "Asset operation. "
+                    "Recommended: 'list*' (lightweight file list) + 'get*ById' (full data by filename). "
+                    "Deprecated: 'get*' (all records) - use list + getById instead for large datasets."
+                ),
             },
             "category": {
                 "type": "string",
-                "description": "Asset category (e.g., 'characters', 'faces', 'bgm', 'se').",
+                "description": (
+                    "Asset category. "
+                    "Images: 'characters', 'faces', 'pictures', 'tilesets', 'battlebacks', 'parallaxes'. "
+                    "Sounds: 'bgm', 'bgs', 'me', 'se'."
+                ),
             },
             "filename": {
                 "type": "string",
-                "description": "Asset filename.",
+                "description": "Asset filename (with or without extension).",
             },
             "sourcePath": {
                 "type": "string",
-                "description": "Source path for import operations.",
+                "description": "Source file path for import operations.",
             },
             "targetPath": {
                 "type": "string",
-                "description": "Target path for export operations.",
+                "description": "Target file path for export operations.",
             },
             "backupPath": {
                 "type": "string",
-                "description": "Path for backup/restore operations.",
+                "description": "Path for backup/restore operations. Optional for backup.",
             },
             **PAGINATION_PROPERTIES,
         },
@@ -558,6 +627,12 @@ rpgmaker_gamestate_schema = _schema_with_required(
                 "description": "Flag ID for progress flag operations.",
             },
             "value": {
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "number"},
+                    {"type": "boolean"},
+                    {"type": "integer"},
+                ],
                 "description": "Value for flag operations.",
             },
             "mapId": {
@@ -617,32 +692,41 @@ rpgmaker_audio_schema = _schema_with_required(
                     "deleteAudioFile",
                     "getAudioInfo",
                 ],
-                "description": "Audio operation to perform. Use 'listAudioFiles' for lightweight ID lists, 'getAudioFileById' for full data of specific file.",
+                "description": (
+                    "Audio operation. "
+                    "Recommended: 'listAudioFiles' (lightweight file list) + 'getAudioFileById' (full data by filename). "
+                    "Deprecated: 'getAudioList' - use listAudioFiles + getAudioFileById instead."
+                ),
             },
             "category": {
                 "type": "string",
                 "enum": ["bgm", "bgs", "me", "se"],
-                "description": "Audio category.",
+                "description": "Audio category: 'bgm' (background music), 'bgs' (background sound), 'me' (music effect), 'se' (sound effect).",
             },
             "filename": {
                 "type": "string",
-                "description": "Audio filename.",
+                "description": "Audio filename (with or without extension).",
             },
             "volume": {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 1,
-                "description": "Volume level (0.0 to 1.0).",
+                "default": 0.8,
+                "description": "Volume level (0.0 to 1.0). Default: 0.8.",
             },
             "pitch": {
                 "type": "number",
-                "description": "Pitch level.",
+                "minimum": 0.5,
+                "maximum": 2.0,
+                "default": 1.0,
+                "description": "Pitch level (0.5 to 2.0). Default: 1.0.",
             },
             "pan": {
                 "type": "number",
                 "minimum": -1,
                 "maximum": 1,
-                "description": "Pan level (-1.0 to 1.0).",
+                "default": 0,
+                "description": "Pan level (-1.0=left to 1.0=right). Default: 0 (center).",
             },
             "settingsData": {
                 "type": "object",
@@ -651,11 +735,11 @@ rpgmaker_audio_schema = _schema_with_required(
             },
             "sourcePath": {
                 "type": "string",
-                "description": "Source path for import operations.",
+                "description": "Source file path for import operations.",
             },
             "targetPath": {
                 "type": "string",
-                "description": "Target path for export operations.",
+                "description": "Target file path for export operations.",
             },
             **PAGINATION_PROPERTIES,
         },
