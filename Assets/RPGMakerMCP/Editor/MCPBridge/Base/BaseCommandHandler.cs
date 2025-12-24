@@ -346,15 +346,79 @@ namespace MCP.Editor.Base
             {
                 ["success"] = true
             };
-            
+
             foreach (var (key, value) in additionalData)
             {
                 response[key] = value;
             }
-            
+
             return response;
         }
-        
+
+        /// <summary>
+        /// Apply pagination (offset/limit) to a list.
+        /// </summary>
+        /// <typeparam name="T">The type of items in the list.</typeparam>
+        /// <param name="items">The source list.</param>
+        /// <param name="payload">The payload containing offset and limit parameters.</param>
+        /// <returns>A paginated list with pagination metadata.</returns>
+        protected (List<T> items, int totalCount, int offset, int limit) ApplyPagination<T>(
+            List<T> items,
+            Dictionary<string, object> payload)
+        {
+            var totalCount = items.Count;
+            var offset = GetInt(payload, "offset", 0);
+            var limit = GetInt(payload, "limit", 100);
+
+            // Validate offset
+            if (offset < 0) offset = 0;
+            if (offset >= totalCount)
+            {
+                return (new List<T>(), totalCount, offset, limit);
+            }
+
+            // Apply offset
+            var result = items.Skip(offset);
+
+            // Apply limit (-1 means no limit)
+            if (limit > 0)
+            {
+                result = result.Take(limit);
+            }
+
+            return (result.ToList(), totalCount, offset, limit);
+        }
+
+        /// <summary>
+        /// Create a paginated success response.
+        /// </summary>
+        protected Dictionary<string, object> CreatePaginatedResponse<T>(
+            string itemsKey,
+            List<T> items,
+            Dictionary<string, object> payload,
+            params (string key, object value)[] additionalData)
+        {
+            var (paginatedItems, totalCount, offset, limit) = ApplyPagination(items, payload);
+
+            var response = new Dictionary<string, object>
+            {
+                ["success"] = true,
+                [itemsKey] = paginatedItems,
+                ["count"] = paginatedItems.Count,
+                ["totalCount"] = totalCount,
+                ["offset"] = offset,
+                ["limit"] = limit,
+                ["hasMore"] = offset + paginatedItems.Count < totalCount
+            };
+
+            foreach (var (key, value) in additionalData)
+            {
+                response[key] = value;
+            }
+
+            return response;
+        }
+
         #endregion
         
         #region Resource Resolution Helper Methods

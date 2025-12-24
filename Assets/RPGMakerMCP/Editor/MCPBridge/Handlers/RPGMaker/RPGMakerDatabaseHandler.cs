@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -20,18 +22,28 @@ namespace MCP.Editor.Handlers.RPGMaker
         public override IEnumerable<string> SupportedOperations => new[]
         {
             "getDatabaseInfo",
+            // Character operations
+            "listCharacters",
+            "getCharacterById",
             "getCharacters",
             "createCharacter",
             "updateCharacter",
             "deleteCharacter",
+            // Item operations
+            "listItems",
+            "getItemById",
             "getItems",
             "createItem",
             "updateItem",
             "deleteItem",
+            // Animation operations
+            "listAnimations",
+            "getAnimationById",
             "getAnimations",
             "createAnimation",
             "updateAnimation",
             "deleteAnimation",
+            // System operations
             "getSystemSettings",
             "updateSystemSettings",
             "exportDatabase",
@@ -45,18 +57,28 @@ namespace MCP.Editor.Handlers.RPGMaker
             return operation switch
             {
                 "getDatabaseInfo" => GetDatabaseInfo(),
+                // Character operations
+                "listCharacters" => ListCharacters(payload),
+                "getCharacterById" => GetCharacterById(payload),
                 "getCharacters" => GetCharacters(payload),
                 "createCharacter" => CreateCharacter(payload),
                 "updateCharacter" => UpdateCharacter(payload),
                 "deleteCharacter" => DeleteCharacter(payload),
+                // Item operations
+                "listItems" => ListItems(payload),
+                "getItemById" => GetItemById(payload),
                 "getItems" => GetItems(payload),
                 "createItem" => CreateItem(payload),
                 "updateItem" => UpdateItem(payload),
                 "deleteItem" => DeleteItem(payload),
+                // Animation operations
+                "listAnimations" => ListAnimations(payload),
+                "getAnimationById" => GetAnimationById(payload),
                 "getAnimations" => GetAnimations(payload),
                 "createAnimation" => CreateAnimation(payload),
                 "updateAnimation" => UpdateAnimation(payload),
                 "deleteAnimation" => DeleteAnimation(payload),
+                // System operations
                 "getSystemSettings" => GetSystemSettings(),
                 "updateSystemSettings" => UpdateSystemSettings(payload),
                 "exportDatabase" => ExportDatabase(payload),
@@ -69,7 +91,13 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         protected override bool RequiresCompilationWait(string operation)
         {
-            var readOnlyOperations = new[] { "getDatabaseInfo", "getCharacters", "getItems", "getAnimations", "getSystemSettings" };
+            var readOnlyOperations = new[] {
+                "getDatabaseInfo",
+                "listCharacters", "getCharacterById", "getCharacters",
+                "listItems", "getItemById", "getItems",
+                "listAnimations", "getAnimationById", "getAnimations",
+                "getSystemSettings"
+            };
             return !readOnlyOperations.Contains(operation);
         }
 
@@ -101,6 +129,90 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         #region Character Operations
 
+        private object ListCharacters(Dictionary<string, object> payload)
+        {
+            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
+            if (!Directory.Exists(characterPath))
+            {
+                return CreatePaginatedResponse("characters", new List<Dictionary<string, object>>(), payload);
+            }
+
+            var characterFiles = Directory.GetFiles(characterPath, "*.json");
+            var characters = new List<Dictionary<string, object>>();
+
+            foreach (var file in characterFiles)
+            {
+                try
+                {
+                    var filename = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+
+                    if (data is JArray array)
+                    {
+                        foreach (var item in array)
+                        {
+                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
+                            var name = item["basic"]?["name"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed";
+                            if (!string.IsNullOrEmpty(uuId))
+                            {
+                                characters.Add(new Dictionary<string, object>
+                                {
+                                    ["uuId"] = uuId,
+                                    ["name"] = name,
+                                    ["filename"] = filename
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to parse character file {file}: {ex.Message}");
+                }
+            }
+
+            return CreatePaginatedResponse("characters", characters, payload);
+        }
+
+        private object GetCharacterById(Dictionary<string, object> payload)
+        {
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            if (string.IsNullOrEmpty(uuId))
+            {
+                throw new InvalidOperationException("uuId is required.");
+            }
+
+            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
+            if (!Directory.Exists(characterPath))
+            {
+                throw new InvalidOperationException("Character directory not found.");
+            }
+
+            var characterFiles = Directory.GetFiles(characterPath, "*.json");
+
+            foreach (var file in characterFiles)
+            {
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemUuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("filename", Path.GetFileNameWithoutExtension(file)),
+                                ("data", ConvertJTokenToObject(item))
+                            );
+                        }
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
+        }
+
         private object GetCharacters(Dictionary<string, object> payload)
         {
             var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
@@ -116,12 +228,26 @@ namespace MCP.Editor.Handlers.RPGMaker
             {
                 try
                 {
-                    var content = File.ReadAllText(file);
-                    characters.Add(new Dictionary<string, object>
+                    var filename = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+
+                    if (data is JArray array)
                     {
-                        ["filename"] = Path.GetFileNameWithoutExtension(file),
-                        ["data"] = MiniJson.Deserialize(content)
-                    });
+                        foreach (var item in array)
+                        {
+                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
+                            if (!string.IsNullOrEmpty(uuId))
+                            {
+                                characters.Add(new Dictionary<string, object>
+                                {
+                                    ["uuId"] = uuId,
+                                    ["name"] = item["basic"]?["name"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed",
+                                    ["filename"] = filename,
+                                    ["data"] = ConvertJTokenToObject(item)
+                                });
+                            }
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -139,47 +265,58 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             var characterData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "characterData");
-            var filename = GetString(payload, "filename");
+            var targetFile = GetString(payload, "filename") ?? "characterActor";
 
             if (characterData == null)
             {
                 throw new InvalidOperationException("Character data is required.");
             }
 
-            if (string.IsNullOrEmpty(filename))
+            // Generate UUID if not provided
+            if (!characterData.ContainsKey("uuId") || string.IsNullOrEmpty(characterData["uuId"]?.ToString()))
             {
-                filename = $"character_{DateTime.Now:yyyyMMdd_HHmmss}";
-            }
-            else
-            {
-                filename = SanitizeFilename(filename);
+                characterData["uuId"] = Guid.NewGuid().ToString();
             }
 
             var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
             Directory.CreateDirectory(characterPath);
 
-            var filePath = Path.Combine(characterPath, $"{filename}.json");
-            File.WriteAllText(filePath, MiniJson.Serialize(characterData));
+            var filePath = Path.Combine(characterPath, $"{targetFile}.json");
+
+            JArray array;
+            if (File.Exists(filePath))
+            {
+                var existing = ReadJsonFile(filePath);
+                array = existing as JArray ?? new JArray();
+            }
+            else
+            {
+                array = new JArray();
+            }
+
+            array.Add(JObject.FromObject(characterData));
+            WriteJsonFile(filePath, array);
 
             AssetDatabase.Refresh();
             RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("filename", filename),
-                ("path", filePath),
-                ("message", $"Character '{filename}' created successfully.")
+                ("uuId", characterData["uuId"]),
+                ("filename", targetFile),
+                ("message", $"Character created successfully.")
             );
         }
 
         private object UpdateCharacter(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             var characterData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "characterData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(uuId))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("uuId is required.");
             }
 
             if (characterData == null)
@@ -188,47 +325,175 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            var filePath = Path.Combine(characterPath, $"{filename}.json");
+            var characterFiles = Directory.GetFiles(characterPath, "*.json");
 
-            if (!File.Exists(filePath))
+            foreach (var file in characterFiles)
             {
-                throw new InvalidOperationException($"Character file '{filename}' not found.");
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            if (partialUpdate)
+                            {
+                                var existing = array[i] as JObject;
+                                existing?.Merge(JObject.FromObject(characterData), new JsonMergeSettings
+                                {
+                                    MergeArrayHandling = MergeArrayHandling.Replace,
+                                    MergeNullValueHandling = MergeNullValueHandling.Merge
+                                });
+                            }
+                            else
+                            {
+                                characterData["uuId"] = uuId; // Preserve UUID
+                                array[i] = JObject.FromObject(characterData);
+                            }
+
+                            WriteJsonFile(file, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("message", $"Character updated successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.WriteAllText(filePath, MiniJson.Serialize(characterData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Character '{filename}' updated successfully."));
+            throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
         }
 
         private object DeleteCharacter(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(uuId))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("uuId is required.");
             }
 
             var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            var filePath = Path.Combine(characterPath, $"{filename}.json");
+            var characterFiles = Directory.GetFiles(characterPath, "*.json");
 
-            if (!File.Exists(filePath))
+            foreach (var file in characterFiles)
             {
-                throw new InvalidOperationException($"Character file '{filename}' not found.");
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    for (int i = array.Count - 1; i >= 0; i--)
+                    {
+                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            array.RemoveAt(i);
+                            WriteJsonFile(file, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("message", $"Character deleted successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.Delete(filePath);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Character '{filename}' deleted successfully."));
+            throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
         }
 
         #endregion
 
         #region Item Operations
+
+        private object ListItems(Dictionary<string, object> payload)
+        {
+            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
+            if (!Directory.Exists(itemPath))
+            {
+                return CreatePaginatedResponse("items", new List<Dictionary<string, object>>(), payload);
+            }
+
+            var itemFiles = Directory.GetFiles(itemPath, "*.json");
+            var items = new List<Dictionary<string, object>>();
+
+            foreach (var file in itemFiles)
+            {
+                try
+                {
+                    var filename = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+
+                    if (data is JArray array)
+                    {
+                        foreach (var item in array)
+                        {
+                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
+                            var name = item["basic"]?["name"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed";
+                            if (!string.IsNullOrEmpty(uuId))
+                            {
+                                items.Add(new Dictionary<string, object>
+                                {
+                                    ["uuId"] = uuId,
+                                    ["name"] = name,
+                                    ["filename"] = filename
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to parse item file {file}: {ex.Message}");
+                }
+            }
+
+            return CreatePaginatedResponse("items", items, payload);
+        }
+
+        private object GetItemById(Dictionary<string, object> payload)
+        {
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            if (string.IsNullOrEmpty(uuId))
+            {
+                throw new InvalidOperationException("uuId is required.");
+            }
+
+            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
+            if (!Directory.Exists(itemPath))
+            {
+                throw new InvalidOperationException("Item directory not found.");
+            }
+
+            var itemFiles = Directory.GetFiles(itemPath, "*.json");
+
+            foreach (var file in itemFiles)
+            {
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemUuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("filename", Path.GetFileNameWithoutExtension(file)),
+                                ("data", ConvertJTokenToObject(item))
+                            );
+                        }
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
+        }
 
         private object GetItems(Dictionary<string, object> payload)
         {
@@ -245,12 +510,21 @@ namespace MCP.Editor.Handlers.RPGMaker
             {
                 try
                 {
-                    var content = File.ReadAllText(file);
-                    items.Add(new Dictionary<string, object>
+                    var filename = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+                    if (data is JArray array)
                     {
-                        ["filename"] = Path.GetFileNameWithoutExtension(file),
-                        ["data"] = MiniJson.Deserialize(content)
-                    });
+                        foreach (var item in array)
+                        {
+                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
+                            items.Add(new Dictionary<string, object>
+                            {
+                                ["uuId"] = uuId,
+                                ["filename"] = filename,
+                                ["data"] = ConvertJTokenToObject(item)
+                            });
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -267,46 +541,56 @@ namespace MCP.Editor.Handlers.RPGMaker
         private object CreateItem(Dictionary<string, object> payload)
         {
             var itemData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData");
-            var filename = GetString(payload, "filename");
+            var targetFile = GetString(payload, "filename") ?? "item";
 
             if (itemData == null)
             {
                 throw new InvalidOperationException("Item data is required.");
             }
 
-            if (string.IsNullOrEmpty(filename))
+            if (!itemData.ContainsKey("uuId") || string.IsNullOrEmpty(itemData["uuId"]?.ToString()))
             {
-                filename = $"item_{DateTime.Now:yyyyMMdd_HHmmss}";
-            }
-            else
-            {
-                filename = SanitizeFilename(filename);
+                itemData["uuId"] = Guid.NewGuid().ToString();
             }
 
             var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
             Directory.CreateDirectory(itemPath);
 
-            var filePath = Path.Combine(itemPath, $"{filename}.json");
-            File.WriteAllText(filePath, MiniJson.Serialize(itemData));
+            var filePath = Path.Combine(itemPath, $"{targetFile}.json");
+
+            JArray array;
+            if (File.Exists(filePath))
+            {
+                var existing = ReadJsonFile(filePath);
+                array = existing as JArray ?? new JArray();
+            }
+            else
+            {
+                array = new JArray();
+            }
+
+            array.Add(JObject.FromObject(itemData));
+            WriteJsonFile(filePath, array);
 
             AssetDatabase.Refresh();
             RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("filename", filename),
-                ("path", filePath),
-                ("message", $"Item '{filename}' created successfully.")
+                ("uuId", itemData["uuId"]),
+                ("filename", targetFile),
+                ("message", $"Item created successfully.")
             );
         }
 
         private object UpdateItem(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             var itemData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(uuId))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("uuId is required.");
             }
 
             if (itemData == null)
@@ -315,47 +599,175 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            var filePath = Path.Combine(itemPath, $"{filename}.json");
+            var itemFiles = Directory.GetFiles(itemPath, "*.json");
 
-            if (!File.Exists(filePath))
+            foreach (var file in itemFiles)
             {
-                throw new InvalidOperationException($"Item file '{filename}' not found.");
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            if (partialUpdate)
+                            {
+                                var existing = array[i] as JObject;
+                                existing?.Merge(JObject.FromObject(itemData), new JsonMergeSettings
+                                {
+                                    MergeArrayHandling = MergeArrayHandling.Replace,
+                                    MergeNullValueHandling = MergeNullValueHandling.Merge
+                                });
+                            }
+                            else
+                            {
+                                itemData["uuId"] = uuId;
+                                array[i] = JObject.FromObject(itemData);
+                            }
+
+                            WriteJsonFile(file, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("message", $"Item updated successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.WriteAllText(filePath, MiniJson.Serialize(itemData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Item '{filename}' updated successfully."));
+            throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
         }
 
         private object DeleteItem(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(uuId))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("uuId is required.");
             }
 
             var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            var filePath = Path.Combine(itemPath, $"{filename}.json");
+            var itemFiles = Directory.GetFiles(itemPath, "*.json");
 
-            if (!File.Exists(filePath))
+            foreach (var file in itemFiles)
             {
-                throw new InvalidOperationException($"Item file '{filename}' not found.");
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    for (int i = array.Count - 1; i >= 0; i--)
+                    {
+                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            array.RemoveAt(i);
+                            WriteJsonFile(file, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("message", $"Item deleted successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.Delete(filePath);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Item '{filename}' deleted successfully."));
+            throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
         }
 
         #endregion
 
         #region Animation Operations
+
+        private object ListAnimations(Dictionary<string, object> payload)
+        {
+            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
+            if (!Directory.Exists(animationPath))
+            {
+                return CreatePaginatedResponse("animations", new List<Dictionary<string, object>>(), payload);
+            }
+
+            var animationFiles = Directory.GetFiles(animationPath, "*.json");
+            var animations = new List<Dictionary<string, object>>();
+
+            foreach (var file in animationFiles)
+            {
+                try
+                {
+                    var filename = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+
+                    if (data is JArray array)
+                    {
+                        foreach (var item in array)
+                        {
+                            var uuId = item["id"]?.ToString();
+                            var name = item["particleName"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed";
+                            if (!string.IsNullOrEmpty(uuId))
+                            {
+                                animations.Add(new Dictionary<string, object>
+                                {
+                                    ["uuId"] = uuId,
+                                    ["name"] = name,
+                                    ["filename"] = filename
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to parse animation file {file}: {ex.Message}");
+                }
+            }
+
+            return CreatePaginatedResponse("animations", animations, payload);
+        }
+
+        private object GetAnimationById(Dictionary<string, object> payload)
+        {
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            if (string.IsNullOrEmpty(uuId))
+            {
+                throw new InvalidOperationException("uuId is required.");
+            }
+
+            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
+            if (!Directory.Exists(animationPath))
+            {
+                throw new InvalidOperationException("Animation directory not found.");
+            }
+
+            var animationFiles = Directory.GetFiles(animationPath, "*.json");
+
+            foreach (var file in animationFiles)
+            {
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemUuId = item["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("filename", Path.GetFileNameWithoutExtension(file)),
+                                ("data", ConvertJTokenToObject(item))
+                            );
+                        }
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
+        }
 
         private object GetAnimations(Dictionary<string, object> payload)
         {
@@ -372,12 +784,21 @@ namespace MCP.Editor.Handlers.RPGMaker
             {
                 try
                 {
-                    var content = File.ReadAllText(file);
-                    animations.Add(new Dictionary<string, object>
+                    var filename = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+                    if (data is JArray array)
                     {
-                        ["filename"] = Path.GetFileNameWithoutExtension(file),
-                        ["data"] = MiniJson.Deserialize(content)
-                    });
+                        foreach (var item in array)
+                        {
+                            var uuId = item["id"]?.ToString();
+                            animations.Add(new Dictionary<string, object>
+                            {
+                                ["uuId"] = uuId,
+                                ["filename"] = filename,
+                                ["data"] = ConvertJTokenToObject(item)
+                            });
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -395,47 +816,57 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             var animationData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "animationData");
-            var filename = GetString(payload, "filename");
+            var targetFile = GetString(payload, "filename") ?? "animation";
 
             if (animationData == null)
             {
                 throw new InvalidOperationException("Animation data is required.");
             }
 
-            if (string.IsNullOrEmpty(filename))
+            if (!animationData.ContainsKey("id") || string.IsNullOrEmpty(animationData["id"]?.ToString()))
             {
-                filename = $"animation_{DateTime.Now:yyyyMMdd_HHmmss}";
-            }
-            else
-            {
-                filename = SanitizeFilename(filename);
+                animationData["id"] = Guid.NewGuid().ToString();
             }
 
             var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
             Directory.CreateDirectory(animationPath);
 
-            var filePath = Path.Combine(animationPath, $"{filename}.json");
-            File.WriteAllText(filePath, MiniJson.Serialize(animationData));
+            var filePath = Path.Combine(animationPath, $"{targetFile}.json");
+
+            JArray array;
+            if (File.Exists(filePath))
+            {
+                var existing = ReadJsonFile(filePath);
+                array = existing as JArray ?? new JArray();
+            }
+            else
+            {
+                array = new JArray();
+            }
+
+            array.Add(JObject.FromObject(animationData));
+            WriteJsonFile(filePath, array);
 
             AssetDatabase.Refresh();
             RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("filename", filename),
-                ("path", filePath),
-                ("message", $"Animation '{filename}' created successfully.")
+                ("uuId", animationData["id"]),
+                ("filename", targetFile),
+                ("message", $"Animation created successfully.")
             );
         }
 
         private object UpdateAnimation(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             var animationData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "animationData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(uuId))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("uuId is required.");
             }
 
             if (animationData == null)
@@ -444,42 +875,86 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            var filePath = Path.Combine(animationPath, $"{filename}.json");
+            var animationFiles = Directory.GetFiles(animationPath, "*.json");
 
-            if (!File.Exists(filePath))
+            foreach (var file in animationFiles)
             {
-                throw new InvalidOperationException($"Animation file '{filename}' not found.");
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemUuId = array[i]["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            if (partialUpdate)
+                            {
+                                var existing = array[i] as JObject;
+                                existing?.Merge(JObject.FromObject(animationData), new JsonMergeSettings
+                                {
+                                    MergeArrayHandling = MergeArrayHandling.Replace,
+                                    MergeNullValueHandling = MergeNullValueHandling.Merge
+                                });
+                            }
+                            else
+                            {
+                                animationData["id"] = uuId;
+                                array[i] = JObject.FromObject(animationData);
+                            }
+
+                            WriteJsonFile(file, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("message", $"Animation updated successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.WriteAllText(filePath, MiniJson.Serialize(animationData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Animation '{filename}' updated successfully."));
+            throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
         }
 
         private object DeleteAnimation(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(uuId))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("uuId is required.");
             }
 
             var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            var filePath = Path.Combine(animationPath, $"{filename}.json");
+            var animationFiles = Directory.GetFiles(animationPath, "*.json");
 
-            if (!File.Exists(filePath))
+            foreach (var file in animationFiles)
             {
-                throw new InvalidOperationException($"Animation file '{filename}' not found.");
+                var data = ReadJsonFile(file);
+                if (data is JArray array)
+                {
+                    for (int i = array.Count - 1; i >= 0; i--)
+                    {
+                        var itemUuId = array[i]["id"]?.ToString();
+                        if (itemUuId == uuId)
+                        {
+                            array.RemoveAt(i);
+                            WriteJsonFile(file, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("uuId", uuId),
+                                ("message", $"Animation deleted successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.Delete(filePath);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Animation '{filename}' deleted successfully."));
+            throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
         }
 
         #endregion
@@ -501,9 +976,9 @@ namespace MCP.Editor.Handlers.RPGMaker
             {
                 try
                 {
-                    var content = File.ReadAllText(file);
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    systemSettings[filename] = MiniJson.Deserialize(content);
+                    var id = Path.GetFileNameWithoutExtension(file);
+                    var data = ReadJsonFile(file);
+                    systemSettings[id] = ConvertJTokenToObject(data);
                 }
                 catch (Exception ex)
                 {
@@ -516,12 +991,13 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object UpdateSystemSettings(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetId(payload);
             var settingData = GetPayloadValue<Dictionary<string, object>>(payload, "settingData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID is required.");
             }
 
             if (settingData == null)
@@ -532,13 +1008,27 @@ namespace MCP.Editor.Handlers.RPGMaker
             var systemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "System");
             Directory.CreateDirectory(systemPath);
 
-            var filePath = Path.Combine(systemPath, $"{filename}.json");
-            File.WriteAllText(filePath, MiniJson.Serialize(settingData));
+            var filePath = Path.Combine(systemPath, $"{id}.json");
 
+            JToken finalData;
+            if (partialUpdate && File.Exists(filePath))
+            {
+                var existing = ReadJsonFile(filePath);
+                finalData = MergeData(existing, settingData);
+            }
+            else
+            {
+                finalData = JToken.FromObject(settingData);
+            }
+
+            WriteJsonFile(filePath, finalData);
             AssetDatabase.Refresh();
             RefreshHierarchy();
 
-            return CreateSuccessResponse(("message", $"System setting '{filename}' updated successfully."));
+            return CreateSuccessResponse(
+                ("id", id),
+                ("message", $"System setting '{id}' updated successfully.")
+            );
         }
 
         #endregion
@@ -655,6 +1145,14 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         #region Helper Methods
 
+        /// <summary>
+        /// Get ID from payload (supports both "id" and "filename" parameters).
+        /// </summary>
+        private string GetId(Dictionary<string, object> payload)
+        {
+            return GetString(payload, "id") ?? GetString(payload, "filename");
+        }
+
         private T GetPayloadValue<T>(Dictionary<string, object> payload, string key) where T : class
         {
             if (payload != null && payload.TryGetValue(key, out var value))
@@ -672,6 +1170,51 @@ namespace MCP.Editor.Handlers.RPGMaker
                 filename = filename.Replace(c, '_');
             }
             return filename;
+        }
+
+        /// <summary>
+        /// Read JSON file and return as JToken (supports both arrays and objects).
+        /// </summary>
+        private JToken ReadJsonFile(string filePath)
+        {
+            var content = File.ReadAllText(filePath);
+            return JToken.Parse(content);
+        }
+
+        /// <summary>
+        /// Convert JToken to appropriate .NET object (Dictionary or List).
+        /// </summary>
+        private object ConvertJTokenToObject(JToken token)
+        {
+            return token.ToObject<object>();
+        }
+
+        /// <summary>
+        /// Write JToken to JSON file with formatting.
+        /// </summary>
+        private void WriteJsonFile(string filePath, JToken data)
+        {
+            var json = data.ToString(Formatting.Indented);
+            File.WriteAllText(filePath, json);
+        }
+
+        /// <summary>
+        /// Merge update data into existing data (partial update support).
+        /// </summary>
+        private JToken MergeData(JToken existing, Dictionary<string, object> updates)
+        {
+            if (existing is JObject existingObj)
+            {
+                var updateJson = JObject.FromObject(updates);
+                existingObj.Merge(updateJson, new JsonMergeSettings
+                {
+                    MergeArrayHandling = MergeArrayHandling.Replace,
+                    MergeNullValueHandling = MergeNullValueHandling.Merge
+                });
+                return existingObj;
+            }
+            // For arrays, replace entirely
+            return JToken.FromObject(updates);
         }
 
         private void CopyDirectory(string sourceDir, string targetDir)

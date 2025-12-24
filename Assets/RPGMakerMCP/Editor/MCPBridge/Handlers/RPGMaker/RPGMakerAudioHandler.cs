@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -27,7 +29,11 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         public override IEnumerable<string> SupportedOperations => new[]
         {
+            // Audio list operations
+            "listAudioFiles",
+            "getAudioFileById",
             "getAudioList",
+            // Playback operations
             "playBgm",
             "stopBgm",
             "playBgs",
@@ -35,10 +41,12 @@ namespace MCP.Editor.Handlers.RPGMaker
             "playMe",
             "playSe",
             "stopAllAudio",
+            // Volume operations
             "setBgmVolume",
             "setBgsVolume",
             "setMeVolume",
             "setSeVolume",
+            // Settings and file management
             "getAudioSettings",
             "updateAudioSettings",
             "importAudioFile",
@@ -51,7 +59,11 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             return operation switch
             {
+                // Audio list operations
+                "listAudioFiles" => ListAudioFiles(payload),
+                "getAudioFileById" => GetAudioFileById(payload),
                 "getAudioList" => GetAudioList(payload),
+                // Playback operations
                 "playBgm" => PlayBGM(payload),
                 "stopBgm" => StopBGM(),
                 "playBgs" => PlayBGS(payload),
@@ -59,10 +71,12 @@ namespace MCP.Editor.Handlers.RPGMaker
                 "playMe" => PlayME(payload),
                 "playSe" => PlaySE(payload),
                 "stopAllAudio" => StopAllAudio(),
+                // Volume operations
                 "setBgmVolume" => SetBGMVolume(payload),
                 "setBgsVolume" => SetBGSVolume(payload),
                 "setMeVolume" => SetMEVolume(payload),
                 "setSeVolume" => SetSEVolume(payload),
+                // Settings and file management
                 "getAudioSettings" => GetAudioSettings(),
                 "updateAudioSettings" => UpdateAudioSettings(payload),
                 "importAudioFile" => ImportAudioFile(payload),
@@ -75,11 +89,102 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         protected override bool RequiresCompilationWait(string operation)
         {
-            var readOnlyOperations = new[] { "getAudioList", "getAudioSettings", "getAudioInfo" };
+            var readOnlyOperations = new[] {
+                "listAudioFiles", "getAudioFileById", "getAudioList",
+                "getAudioSettings", "getAudioInfo"
+            };
             return !readOnlyOperations.Contains(operation);
         }
 
         #region Audio List
+
+        private object ListAudioFiles(Dictionary<string, object> payload)
+        {
+            var category = GetString(payload, "category")?.ToLower();
+            var soundsPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Sounds");
+
+            if (!Directory.Exists(soundsPath))
+            {
+                return CreatePaginatedResponse("audioFiles", new List<Dictionary<string, object>>(), payload);
+            }
+
+            var audioFiles = new List<Dictionary<string, object>>();
+
+            if (!string.IsNullOrEmpty(category) && AudioCategories.ContainsKey(category))
+            {
+                var categoryPath = Path.Combine(soundsPath, AudioCategories[category]);
+                if (Directory.Exists(categoryPath))
+                {
+                    audioFiles.AddRange(GetAudioFileIds(categoryPath, AudioCategories[category]));
+                }
+            }
+            else
+            {
+                foreach (var categoryPair in AudioCategories)
+                {
+                    var categoryPath = Path.Combine(soundsPath, categoryPair.Value);
+                    if (Directory.Exists(categoryPath))
+                    {
+                        audioFiles.AddRange(GetAudioFileIds(categoryPath, categoryPair.Value));
+                    }
+                }
+            }
+
+            return CreatePaginatedResponse("audioFiles", audioFiles, payload);
+        }
+
+        private List<Dictionary<string, object>> GetAudioFileIds(string path, string category)
+        {
+            var result = new List<Dictionary<string, object>>();
+            var files = Directory.GetFiles(path, "*.wav")
+                .Concat(Directory.GetFiles(path, "*.mp3"))
+                .Concat(Directory.GetFiles(path, "*.ogg"));
+
+            foreach (var file in files)
+            {
+                result.Add(new Dictionary<string, object>
+                {
+                    ["id"] = Path.GetFileName(file),
+                    ["filename"] = Path.GetFileName(file),
+                    ["category"] = category
+                });
+            }
+
+            return result;
+        }
+
+        private object GetAudioFileById(Dictionary<string, object> payload)
+        {
+            var filename = GetString(payload, "filename");
+            var category = GetString(payload, "category")?.ToLower();
+
+            if (string.IsNullOrEmpty(filename))
+            {
+                throw new InvalidOperationException("Filename is required.");
+            }
+
+            if (string.IsNullOrEmpty(category) || !AudioCategories.ContainsKey(category))
+            {
+                throw new InvalidOperationException($"Valid category is required. Available: {string.Join(", ", AudioCategories.Keys)}");
+            }
+
+            var audioPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Sounds", AudioCategories[category], filename);
+
+            if (!File.Exists(audioPath))
+            {
+                throw new InvalidOperationException($"Audio file not found: {filename} in category {category}");
+            }
+
+            var fileInfo = new FileInfo(audioPath);
+            return CreateSuccessResponse(
+                ("filename", filename),
+                ("category", AudioCategories[category]),
+                ("path", audioPath),
+                ("size", fileInfo.Length),
+                ("extension", Path.GetExtension(audioPath)),
+                ("lastModified", fileInfo.LastWriteTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"))
+            );
+        }
 
         private object GetAudioList(Dictionary<string, object> payload)
         {

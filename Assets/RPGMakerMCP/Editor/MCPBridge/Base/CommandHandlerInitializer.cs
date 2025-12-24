@@ -62,7 +62,7 @@ namespace MCP.Editor.Base
         /// </summary>
         private static void RegisterUtilityHandlers()
         {
-            CommandHandlerFactory.Register("pingUnityEditor", new PingHandler());
+            CommandHandlerFactory.Register("ping", new PingHandler());
             CommandHandlerFactory.Register("compilationAwait", new CompilationAwaitHandler());
         }
 

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -19,18 +21,24 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         public override IEnumerable<string> SupportedOperations => new[]
         {
+            // Common event operations
+            "listCommonEvents",
+            "getCommonEventById",
             "getCommonEvents",
             "createCommonEvent",
             "updateCommonEvent",
             "deleteCommonEvent",
+            // Event command operations
             "getEventCommands",
             "createEventCommand",
             "updateEventCommand",
             "deleteEventCommand",
+            // Event page operations
             "getEventPages",
             "createEventPage",
             "updateEventPage",
             "deleteEventPage",
+            // Utility
             "copyEvent",
             "moveEvent",
             "validateEvent"
@@ -40,18 +48,24 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             return operation switch
             {
+                // Common event operations
+                "listCommonEvents" => ListCommonEvents(),
+                "getCommonEventById" => GetCommonEventById(payload),
                 "getCommonEvents" => GetCommonEvents(payload),
                 "createCommonEvent" => CreateCommonEvent(payload),
                 "updateCommonEvent" => UpdateCommonEvent(payload),
                 "deleteCommonEvent" => DeleteCommonEvent(payload),
+                // Event command operations
                 "getEventCommands" => GetEventCommands(payload),
                 "createEventCommand" => CreateEventCommand(payload),
                 "updateEventCommand" => UpdateEventCommand(payload),
                 "deleteEventCommand" => DeleteEventCommand(payload),
+                // Event page operations
                 "getEventPages" => GetEventPages(payload),
                 "createEventPage" => CreateEventPage(payload),
                 "updateEventPage" => UpdateEventPage(payload),
                 "deleteEventPage" => DeleteEventPage(payload),
+                // Utility
                 "copyEvent" => CopyEvent(payload),
                 "moveEvent" => MoveEvent(payload),
                 "validateEvent" => ValidateEvent(payload),
@@ -61,11 +75,99 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         protected override bool RequiresCompilationWait(string operation)
         {
-            var readOnlyOperations = new[] { "getCommonEvents", "getEventCommands", "getEventPages", "validateEvent" };
+            var readOnlyOperations = new[] {
+                "listCommonEvents", "getCommonEventById", "getCommonEvents",
+                "getEventCommands", "getEventPages", "validateEvent"
+            };
             return !readOnlyOperations.Contains(operation);
         }
 
         #region Common Event Operations
+
+        private object ListCommonEvents()
+        {
+            var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
+            if (!Directory.Exists(eventPath))
+            {
+                return CreateSuccessResponse(("events", new List<object>()), ("count", 0));
+            }
+
+            var events = new List<Dictionary<string, object>>();
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
+
+            foreach (var eventFile in eventFiles)
+            {
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                try
+                {
+                    var filename = Path.GetFileNameWithoutExtension(filePath);
+                    var data = ReadJsonFile(filePath);
+
+                    if (data is JArray array)
+                    {
+                        foreach (var item in array)
+                        {
+                            var id = item["id"]?.ToString();
+                            var name = item["name"]?.ToString() ?? "Unnamed Event";
+                            if (!string.IsNullOrEmpty(id))
+                            {
+                                events.Add(new Dictionary<string, object>
+                                {
+                                    ["id"] = id,
+                                    ["name"] = name,
+                                    ["filename"] = filename
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogWarning($"Failed to parse event file {eventFile}: {ex.Message}");
+                }
+            }
+
+            return CreateSuccessResponse(("events", events), ("count", events.Count));
+        }
+
+        private object GetCommonEventById(Dictionary<string, object> payload)
+        {
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new InvalidOperationException("ID (uuId) is required.");
+            }
+
+            var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
+
+            foreach (var eventFile in eventFiles)
+            {
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemId = item["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("filename", Path.GetFileNameWithoutExtension(filePath)),
+                                ("data", ConvertJTokenToObject(item))
+                            );
+                        }
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Common event with id '{id}' not found.");
+        }
 
         private object GetCommonEvents(Dictionary<string, object> payload)
         {
@@ -75,27 +177,40 @@ namespace MCP.Editor.Handlers.RPGMaker
                 return CreateSuccessResponse(("events", new List<object>()), ("message", "No common event data found."));
             }
 
-            var eventFiles = Directory.GetFiles(eventPath, "*.json");
             var events = new List<Dictionary<string, object>>();
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            foreach (var file in eventFiles)
+            foreach (var eventFile in eventFiles)
             {
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
                 try
                 {
-                    var content = File.ReadAllText(file);
-                    var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-                    events.Add(new Dictionary<string, object>
+                    var filename = Path.GetFileNameWithoutExtension(filePath);
+                    var data = ReadJsonFile(filePath);
+
+                    if (data is JArray array)
                     {
-                        ["filename"] = Path.GetFileNameWithoutExtension(file),
-                        ["name"] = eventData?.ContainsKey("name") == true ? eventData["name"]?.ToString() : "Unnamed Event",
-                        ["trigger"] = eventData?.ContainsKey("trigger") == true ? eventData["trigger"] : null,
-                        ["switchId"] = eventData?.ContainsKey("switchId") == true ? eventData["switchId"] : null,
-                        ["data"] = eventData
-                    });
+                        foreach (var item in array)
+                        {
+                            var id = item["id"]?.ToString();
+                            if (!string.IsNullOrEmpty(id))
+                            {
+                                events.Add(new Dictionary<string, object>
+                                {
+                                    ["id"] = id,
+                                    ["name"] = item["name"]?.ToString() ?? "Unnamed Event",
+                                    ["filename"] = filename,
+                                    ["data"] = ConvertJTokenToObject(item)
+                                });
+                            }
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"Failed to parse event file {file}: {ex.Message}");
+                    Debug.LogWarning($"Failed to parse event file {eventFile}: {ex.Message}");
                 }
             }
 
@@ -108,46 +223,59 @@ namespace MCP.Editor.Handlers.RPGMaker
         private object CreateCommonEvent(Dictionary<string, object> payload)
         {
             var eventData = GetPayloadValue<Dictionary<string, object>>(payload, "eventData");
-            var filename = GetString(payload, "filename");
+            var targetFile = GetString(payload, "filename") ?? "eventCommon";
 
             if (eventData == null)
             {
                 throw new InvalidOperationException("Event data is required.");
             }
 
-            if (string.IsNullOrEmpty(filename))
+            // Generate UUID if not provided
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
+            if (string.IsNullOrEmpty(id))
             {
-                filename = $"event_{DateTime.Now:yyyyMMdd_HHmmss}";
+                id = Guid.NewGuid().ToString();
             }
-            else
-            {
-                filename = SanitizeFilename(filename);
-            }
+            eventData["id"] = id;
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
             Directory.CreateDirectory(eventPath);
 
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
+            var filePath = Path.Combine(eventPath, $"{targetFile}.json");
+
+            JArray array;
+            if (File.Exists(filePath))
+            {
+                var existingData = ReadJsonFile(filePath);
+                array = existingData as JArray ?? new JArray();
+            }
+            else
+            {
+                array = new JArray();
+            }
+
+            array.Add(JObject.FromObject(eventData));
+            WriteJsonFile(filePath, array);
 
             AssetDatabase.Refresh();
             RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("filename", filename),
-                ("path", filePath),
-                ("message", $"Common event '{filename}' created successfully.")
+                ("id", id),
+                ("filename", targetFile),
+                ("message", $"Common event '{id}' created successfully.")
             );
         }
 
         private object UpdateCommonEvent(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var eventData = GetPayloadValue<Dictionary<string, object>>(payload, "eventData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (eventData == null)
@@ -156,42 +284,92 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Common event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            JToken finalData;
+                            if (partialUpdate)
+                            {
+                                finalData = MergeData(array[i], eventData);
+                            }
+                            else
+                            {
+                                eventData["id"] = id; // Preserve UUID
+                                finalData = JToken.FromObject(eventData);
+                            }
+                            array[i] = finalData;
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("filename", Path.GetFileNameWithoutExtension(filePath)),
+                                ("message", $"Common event '{id}' updated successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Common event '{filename}' updated successfully."));
+            throw new InvalidOperationException($"Common event with id '{id}' not found.");
         }
 
         private object DeleteCommonEvent(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Common event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            array.RemoveAt(i);
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("filename", Path.GetFileNameWithoutExtension(filePath)),
+                                ("message", $"Common event '{id}' deleted successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            File.Delete(filePath);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Common event '{filename}' deleted successfully."));
+            throw new InvalidOperationException($"Common event with id '{id}' not found.");
         }
 
         #endregion
@@ -200,53 +378,65 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object GetEventCommands(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageIndex = GetInt(payload, "pageIndex", 0);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemId = item["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var pages = item["pages"] as JArray ?? item["eventCommands"] as JArray;
+
+                            if (pages == null || pageIndex >= pages.Count)
+                            {
+                                return CreateSuccessResponse(
+                                    ("commands", new List<object>()),
+                                    ("message", "No commands found for the specified page.")
+                                );
+                            }
+
+                            var page = pages[pageIndex] as JObject;
+                            var commands = page?["list"]?.ToObject<List<object>>() ?? page?.ToObject<List<object>>() ?? new List<object>();
+
+                            return CreateSuccessResponse(
+                                ("commands", commands),
+                                ("id", id),
+                                ("pageIndex", pageIndex)
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-
-            var pages = eventData?.ContainsKey("pages") == true ? eventData["pages"] as List<object> : null;
-            if (pages == null || pageIndex >= pages.Count)
-            {
-                return CreateSuccessResponse(
-                    ("commands", new List<object>()),
-                    ("message", "No commands found for the specified page.")
-                );
-            }
-
-            var page = pages[pageIndex] as Dictionary<string, object>;
-            var commands = page?.ContainsKey("list") == true ? page["list"] : new List<object>();
-
-            return CreateSuccessResponse(
-                ("commands", commands),
-                ("filename", filename),
-                ("pageIndex", pageIndex)
-            );
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         private object CreateEventCommand(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageIndex = GetInt(payload, "pageIndex", 0);
             var commandData = GetPayloadValue<Dictionary<string, object>>(payload, "commandData");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (commandData == null)
@@ -255,53 +445,63 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var eventItem = array[i] as JObject;
+                            var pages = eventItem["pages"] as JArray ?? new JArray();
+
+                            while (pages.Count <= pageIndex)
+                            {
+                                pages.Add(JObject.FromObject(new Dictionary<string, object> { ["list"] = new List<object>() }));
+                            }
+
+                            var page = pages[pageIndex] as JObject;
+                            var commands = page["list"] as JArray ?? new JArray();
+                            commands.Add(JObject.FromObject(commandData));
+                            page["list"] = commands;
+                            eventItem["pages"] = pages;
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("pageIndex", pageIndex),
+                                ("message", $"Command added to event '{id}' page {pageIndex} successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-
-            if (!eventData.ContainsKey("pages") || eventData["pages"] == null)
-            {
-                eventData["pages"] = new List<object> { new Dictionary<string, object> { ["list"] = new List<object>() } };
-            }
-
-            var pages = eventData["pages"] as List<object>;
-            while (pages.Count <= pageIndex)
-            {
-                pages.Add(new Dictionary<string, object> { ["list"] = new List<object>() });
-            }
-
-            var page = pages[pageIndex] as Dictionary<string, object>;
-            if (!page.ContainsKey("list") || page["list"] == null)
-            {
-                page["list"] = new List<object>();
-            }
-
-            var commands = page["list"] as List<object>;
-            commands.Add(commandData);
-
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Command added to event '{filename}' page {pageIndex} successfully."));
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         private object UpdateEventCommand(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageIndex = GetInt(payload, "pageIndex", 0);
             var commandIndex = GetInt(payload, "commandIndex", -1);
             var commandData = GetPayloadValue<Dictionary<string, object>>(payload, "commandData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (commandIndex < 0)
@@ -315,48 +515,77 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var eventItem = array[i] as JObject;
+                            var pages = eventItem["pages"] as JArray;
+
+                            if (pages == null || pageIndex >= pages.Count)
+                            {
+                                throw new InvalidOperationException("Invalid page index.");
+                            }
+
+                            var page = pages[pageIndex] as JObject;
+                            var commands = page?["list"] as JArray;
+
+                            if (commands == null || commandIndex >= commands.Count)
+                            {
+                                throw new InvalidOperationException("Invalid command index.");
+                            }
+
+                            if (partialUpdate)
+                            {
+                                var existing = commands[commandIndex] as JObject;
+                                existing?.Merge(JObject.FromObject(commandData), new JsonMergeSettings
+                                {
+                                    MergeArrayHandling = MergeArrayHandling.Replace
+                                });
+                            }
+                            else
+                            {
+                                commands[commandIndex] = JObject.FromObject(commandData);
+                            }
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("pageIndex", pageIndex),
+                                ("commandIndex", commandIndex),
+                                ("message", $"Command {commandIndex} in event '{id}' page {pageIndex} updated successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-            var pages = eventData?["pages"] as List<object>;
-
-            if (pages == null || pageIndex >= pages.Count)
-            {
-                throw new InvalidOperationException("Invalid page index.");
-            }
-
-            var page = pages[pageIndex] as Dictionary<string, object>;
-            var commands = page?["list"] as List<object>;
-
-            if (commands == null || commandIndex >= commands.Count)
-            {
-                throw new InvalidOperationException("Invalid command index.");
-            }
-
-            commands[commandIndex] = commandData;
-
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Command {commandIndex} in event '{filename}' page {pageIndex} updated successfully."));
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         private object DeleteEventCommand(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageIndex = GetInt(payload, "pageIndex", 0);
             var commandIndex = GetInt(payload, "commandIndex", -1);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (commandIndex < 0)
@@ -365,37 +594,55 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var eventItem = array[i] as JObject;
+                            var pages = eventItem["pages"] as JArray;
+
+                            if (pages == null || pageIndex >= pages.Count)
+                            {
+                                throw new InvalidOperationException("Invalid page index.");
+                            }
+
+                            var page = pages[pageIndex] as JObject;
+                            var commands = page?["list"] as JArray;
+
+                            if (commands == null || commandIndex >= commands.Count)
+                            {
+                                throw new InvalidOperationException("Invalid command index.");
+                            }
+
+                            commands.RemoveAt(commandIndex);
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("pageIndex", pageIndex),
+                                ("commandIndex", commandIndex),
+                                ("message", $"Command {commandIndex} deleted from event '{id}' page {pageIndex} successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-            var pages = eventData?["pages"] as List<object>;
-
-            if (pages == null || pageIndex >= pages.Count)
-            {
-                throw new InvalidOperationException("Invalid page index.");
-            }
-
-            var page = pages[pageIndex] as Dictionary<string, object>;
-            var commands = page?["list"] as List<object>;
-
-            if (commands == null || commandIndex >= commands.Count)
-            {
-                throw new InvalidOperationException("Invalid command index.");
-            }
-
-            commands.RemoveAt(commandIndex);
-
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Command {commandIndex} deleted from event '{filename}' page {pageIndex} successfully."));
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         #endregion
@@ -404,40 +651,52 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object GetEventPages(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemId = item["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var pages = item["pages"]?.ToObject<List<object>>() ?? new List<object>();
+
+                            return CreateSuccessResponse(
+                                ("pages", pages),
+                                ("count", pages.Count),
+                                ("id", id)
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-            var pages = eventData?.ContainsKey("pages") == true ? eventData["pages"] : new List<object>();
-
-            return CreateSuccessResponse(
-                ("pages", pages),
-                ("count", (pages as List<object>)?.Count ?? 0),
-                ("filename", filename)
-            );
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         private object CreateEventPage(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageData = GetPayloadValue<Dictionary<string, object>>(payload, "pageData");
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (pageData == null)
@@ -450,43 +709,53 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var eventItem = array[i] as JObject;
+                            var pages = eventItem["pages"] as JArray ?? new JArray();
+                            pages.Add(JObject.FromObject(pageData));
+                            eventItem["pages"] = pages;
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("pageIndex", pages.Count - 1),
+                                ("message", $"Event page added to '{id}' successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-
-            if (!eventData.ContainsKey("pages") || eventData["pages"] == null)
-            {
-                eventData["pages"] = new List<object>();
-            }
-
-            var pages = eventData["pages"] as List<object>;
-            pages.Add(pageData);
-
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(
-                ("pageIndex", pages.Count - 1),
-                ("message", $"Event page added to '{filename}' successfully.")
-            );
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         private object UpdateEventPage(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageIndex = GetInt(payload, "pageIndex", -1);
             var pageData = GetPayloadValue<Dictionary<string, object>>(payload, "pageData");
+            var partialUpdate = GetBool(payload, "partial", false);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (pageIndex < 0)
@@ -500,39 +769,67 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var eventItem = array[i] as JObject;
+                            var pages = eventItem["pages"] as JArray;
+
+                            if (pages == null || pageIndex >= pages.Count)
+                            {
+                                throw new InvalidOperationException("Invalid page index.");
+                            }
+
+                            if (partialUpdate)
+                            {
+                                var existing = pages[pageIndex] as JObject;
+                                existing?.Merge(JObject.FromObject(pageData), new JsonMergeSettings
+                                {
+                                    MergeArrayHandling = MergeArrayHandling.Replace
+                                });
+                            }
+                            else
+                            {
+                                pages[pageIndex] = JObject.FromObject(pageData);
+                            }
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("pageIndex", pageIndex),
+                                ("message", $"Event page {pageIndex} in '{id}' updated successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-            var pages = eventData?["pages"] as List<object>;
-
-            if (pages == null || pageIndex >= pages.Count)
-            {
-                throw new InvalidOperationException("Invalid page index.");
-            }
-
-            pages[pageIndex] = pageData;
-
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Event page {pageIndex} in '{filename}' updated successfully."));
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         private object DeleteEventPage(Dictionary<string, object> payload)
         {
-            var filename = GetString(payload, "filename");
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
             var pageIndex = GetInt(payload, "pageIndex", -1);
 
-            if (string.IsNullOrEmpty(filename))
+            if (string.IsNullOrEmpty(id))
             {
-                throw new InvalidOperationException("Filename is required.");
+                throw new InvalidOperationException("ID (uuId) is required.");
             }
 
             if (pageIndex < 0)
@@ -541,29 +838,46 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(filePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var eventItem = array[i] as JObject;
+                            var pages = eventItem["pages"] as JArray;
+
+                            if (pages == null || pageIndex >= pages.Count)
+                            {
+                                throw new InvalidOperationException("Invalid page index.");
+                            }
+
+                            pages.RemoveAt(pageIndex);
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", id),
+                                ("pageIndex", pageIndex),
+                                ("message", $"Event page {pageIndex} deleted from '{id}' successfully.")
+                            );
+                        }
+                    }
+                }
             }
 
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-            var pages = eventData?["pages"] as List<object>;
-
-            if (pages == null || pageIndex >= pages.Count)
-            {
-                throw new InvalidOperationException("Invalid page index.");
-            }
-
-            pages.RemoveAt(pageIndex);
-
-            File.WriteAllText(filePath, MiniJson.Serialize(eventData));
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Event page {pageIndex} deleted from '{filename}' successfully."));
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         #endregion
@@ -572,134 +886,206 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object CopyEvent(Dictionary<string, object> payload)
         {
-            var sourceFilename = GetString(payload, "sourceFilename");
-            var targetFilename = GetString(payload, "targetFilename");
+            var sourceId = GetString(payload, "uuId") ?? GetString(payload, "sourceId") ?? GetString(payload, "id");
+            var newId = GetString(payload, "targetId") ?? Guid.NewGuid().ToString();
 
-            if (string.IsNullOrEmpty(sourceFilename))
+            if (string.IsNullOrEmpty(sourceId))
             {
-                throw new InvalidOperationException("Source filename is required.");
-            }
-
-            if (string.IsNullOrEmpty(targetFilename))
-            {
-                targetFilename = $"{sourceFilename}_copy_{DateTime.Now:yyyyMMdd_HHmmss}";
+                throw new InvalidOperationException("Source ID (uuId) is required.");
             }
 
             var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var sourceFilePath = Path.Combine(eventPath, $"{sourceFilename}.json");
-            var targetFilePath = Path.Combine(eventPath, $"{targetFilename}.json");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
 
-            if (!File.Exists(sourceFilePath))
+            foreach (var eventFile in eventFiles)
             {
-                throw new InvalidOperationException($"Source event file '{sourceFilename}' not found.");
-            }
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
 
-            File.Copy(sourceFilePath, targetFilePath, true);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Event '{sourceFilename}' copied to '{targetFilename}' successfully."));
-        }
-
-        private object MoveEvent(Dictionary<string, object> payload)
-        {
-            var sourceFilename = GetString(payload, "sourceFilename");
-            var targetFilename = GetString(payload, "targetFilename");
-
-            if (string.IsNullOrEmpty(sourceFilename))
-            {
-                throw new InvalidOperationException("Source filename is required.");
-            }
-
-            if (string.IsNullOrEmpty(targetFilename))
-            {
-                throw new InvalidOperationException("Target filename is required.");
-            }
-
-            var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var sourceFilePath = Path.Combine(eventPath, $"{sourceFilename}.json");
-            var targetFilePath = Path.Combine(eventPath, $"{targetFilename}.json");
-
-            if (!File.Exists(sourceFilePath))
-            {
-                throw new InvalidOperationException($"Source event file '{sourceFilename}' not found.");
-            }
-
-            File.Move(sourceFilePath, targetFilePath);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Event '{sourceFilename}' moved to '{targetFilename}' successfully."));
-        }
-
-        private object ValidateEvent(Dictionary<string, object> payload)
-        {
-            var filename = GetString(payload, "filename");
-
-            if (string.IsNullOrEmpty(filename))
-            {
-                throw new InvalidOperationException("Filename is required.");
-            }
-
-            var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
-            var filePath = Path.Combine(eventPath, $"{filename}.json");
-
-            if (!File.Exists(filePath))
-            {
-                throw new InvalidOperationException($"Event file '{filename}' not found.");
-            }
-
-            var issues = new List<string>();
-            var content = File.ReadAllText(filePath);
-            var eventData = MiniJson.Deserialize(content) as Dictionary<string, object>;
-
-            if (eventData == null)
-            {
-                issues.Add("Event data is null or invalid JSON.");
-            }
-            else
-            {
-                if (!eventData.ContainsKey("name") || string.IsNullOrEmpty(eventData["name"]?.ToString()))
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
                 {
-                    issues.Add("Event has no name.");
-                }
-
-                if (!eventData.ContainsKey("pages") || eventData["pages"] == null)
-                {
-                    issues.Add("Event has no pages.");
-                }
-                else
-                {
-                    var pages = eventData["pages"] as List<object>;
-                    if (pages != null)
+                    foreach (var item in array)
                     {
-                        for (int i = 0; i < pages.Count; i++)
+                        var itemId = item["id"]?.ToString();
+                        if (itemId == sourceId)
                         {
-                            var page = pages[i] as Dictionary<string, object>;
-                            if (page == null)
-                            {
-                                issues.Add($"Page {i} is null or invalid.");
-                            }
-                            else if (!page.ContainsKey("list") || page["list"] == null)
-                            {
-                                issues.Add($"Page {i} has no command list.");
-                            }
+                            // Clone the event with a new ID
+                            var copiedEvent = item.DeepClone() as JObject;
+                            copiedEvent["id"] = newId;
+                            var originalName = copiedEvent["name"]?.ToString() ?? "Unnamed";
+                            copiedEvent["name"] = $"{originalName} (Copy)";
+
+                            array.Add(copiedEvent);
+
+                            WriteJsonFile(filePath, array);
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("sourceId", sourceId),
+                                ("newId", newId),
+                                ("filename", Path.GetFileNameWithoutExtension(filePath)),
+                                ("message", $"Event '{sourceId}' copied with new ID '{newId}' successfully.")
+                            );
                         }
                     }
                 }
             }
 
-            return CreateSuccessResponse(
-                ("valid", issues.Count == 0),
-                ("issues", issues),
-                ("issueCount", issues.Count),
-                ("filename", filename)
-            );
+            throw new InvalidOperationException($"Source event with id '{sourceId}' not found.");
+        }
+
+        private object MoveEvent(Dictionary<string, object> payload)
+        {
+            var sourceId = GetString(payload, "uuId") ?? GetString(payload, "sourceId") ?? GetString(payload, "id");
+            var targetFile = GetString(payload, "targetFilename") ?? GetString(payload, "targetFile");
+
+            if (string.IsNullOrEmpty(sourceId))
+            {
+                throw new InvalidOperationException("Source ID (uuId) is required.");
+            }
+
+            if (string.IsNullOrEmpty(targetFile))
+            {
+                throw new InvalidOperationException("Target filename (eventCommon, eventBattle, or eventMap) is required.");
+            }
+
+            var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
+            var targetFilePath = Path.Combine(eventPath, $"{targetFile}.json");
+
+            foreach (var eventFile in eventFiles)
+            {
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    for (int i = 0; i < array.Count; i++)
+                    {
+                        var itemId = array[i]["id"]?.ToString();
+                        if (itemId == sourceId)
+                        {
+                            var eventItem = array[i].DeepClone();
+                            array.RemoveAt(i);
+                            WriteJsonFile(filePath, array);
+
+                            // Add to target file
+                            JArray targetArray;
+                            if (File.Exists(targetFilePath))
+                            {
+                                var targetData = ReadJsonFile(targetFilePath);
+                                targetArray = targetData as JArray ?? new JArray();
+                            }
+                            else
+                            {
+                                targetArray = new JArray();
+                            }
+
+                            targetArray.Add(eventItem);
+                            WriteJsonFile(targetFilePath, targetArray);
+
+                            AssetDatabase.Refresh();
+                            RefreshHierarchy();
+
+                            return CreateSuccessResponse(
+                                ("id", sourceId),
+                                ("sourceFile", Path.GetFileNameWithoutExtension(filePath)),
+                                ("targetFile", targetFile),
+                                ("message", $"Event '{sourceId}' moved to '{targetFile}' successfully.")
+                            );
+                        }
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Source event with id '{sourceId}' not found.");
+        }
+
+        private object ValidateEvent(Dictionary<string, object> payload)
+        {
+            var id = GetString(payload, "uuId") ?? GetString(payload, "id");
+
+            if (string.IsNullOrEmpty(id))
+            {
+                throw new InvalidOperationException("ID (uuId) is required.");
+            }
+
+            var eventPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Event", "JSON");
+            var eventFiles = new[] { "eventCommon.json", "eventBattle.json", "eventMap.json" };
+
+            foreach (var eventFile in eventFiles)
+            {
+                var filePath = Path.Combine(eventPath, eventFile);
+                if (!File.Exists(filePath)) continue;
+
+                var data = ReadJsonFile(filePath);
+                if (data is JArray array)
+                {
+                    foreach (var item in array)
+                    {
+                        var itemId = item["id"]?.ToString();
+                        if (itemId == id)
+                        {
+                            var issues = new List<string>();
+                            try
+                            {
+                                if (string.IsNullOrEmpty(item["name"]?.ToString()))
+                                {
+                                    issues.Add("Event has no name.");
+                                }
+
+                                var pages = item["pages"] as JArray;
+                                if (pages == null || pages.Count == 0)
+                                {
+                                    issues.Add("Event has no pages.");
+                                }
+                                else
+                                {
+                                    for (int i = 0; i < pages.Count; i++)
+                                    {
+                                        var page = pages[i] as JObject;
+                                        if (page == null)
+                                        {
+                                            issues.Add($"Page {i} is null or invalid.");
+                                        }
+                                        else if (page["list"] == null)
+                                        {
+                                            issues.Add($"Page {i} has no command list.");
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                issues.Add($"Event data is invalid: {ex.Message}");
+                            }
+
+                            return CreateSuccessResponse(
+                                ("valid", issues.Count == 0),
+                                ("issues", issues),
+                                ("issueCount", issues.Count),
+                                ("id", id),
+                                ("filename", Path.GetFileNameWithoutExtension(filePath))
+                            );
+                        }
+                    }
+                }
+            }
+
+            throw new InvalidOperationException($"Event with id '{id}' not found.");
         }
 
         #endregion
 
         #region Helper Methods
+
+        private string GetId(Dictionary<string, object> payload)
+        {
+            return GetString(payload, "id") ?? GetString(payload, "filename");
+        }
 
         private T GetPayloadValue<T>(Dictionary<string, object> payload, string key) where T : class
         {
@@ -730,6 +1116,38 @@ namespace MCP.Editor.Handlers.RPGMaker
                 filename = filename.Replace(c, '_');
             }
             return filename;
+        }
+
+        private JToken ReadJsonFile(string filePath)
+        {
+            var content = File.ReadAllText(filePath);
+            return JToken.Parse(content);
+        }
+
+        private object ConvertJTokenToObject(JToken token)
+        {
+            return token.ToObject<object>();
+        }
+
+        private void WriteJsonFile(string filePath, JToken data)
+        {
+            var json = data.ToString(Formatting.Indented);
+            File.WriteAllText(filePath, json);
+        }
+
+        private JToken MergeData(JToken existing, Dictionary<string, object> updates)
+        {
+            if (existing is JObject existingObj)
+            {
+                var updateJson = JObject.FromObject(updates);
+                existingObj.Merge(updateJson, new JsonMergeSettings
+                {
+                    MergeArrayHandling = MergeArrayHandling.Replace,
+                    MergeNullValueHandling = MergeNullValueHandling.Merge
+                });
+                return existingObj;
+            }
+            return JToken.FromObject(updates);
         }
 
         private void RefreshHierarchy()

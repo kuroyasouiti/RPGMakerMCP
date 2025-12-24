@@ -17,6 +17,23 @@ def _schema_with_required(schema: dict[str, Any], required: list[str]) -> dict[s
     return enriched
 
 
+# Common pagination parameters for list operations
+PAGINATION_PROPERTIES = {
+    "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0,
+        "description": "Number of items to skip from the beginning of the list (0-based). Default: 0.",
+    },
+    "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 100,
+        "description": "Maximum number of items to return. Default: 100. Use -1 for no limit.",
+    },
+}
+
+
 # ============================================================
 # RPGMaker Database Tool Schema
 # ============================================================
@@ -28,18 +45,28 @@ rpgmaker_database_schema = _schema_with_required(
                 "type": "string",
                 "enum": [
                     "getDatabaseInfo",
+                    # Character operations
+                    "listCharacters",
+                    "getCharacterById",
                     "getCharacters",
                     "createCharacter",
                     "updateCharacter",
                     "deleteCharacter",
+                    # Item operations
+                    "listItems",
+                    "getItemById",
                     "getItems",
                     "createItem",
                     "updateItem",
                     "deleteItem",
+                    # Animation operations
+                    "listAnimations",
+                    "getAnimationById",
                     "getAnimations",
                     "createAnimation",
                     "updateAnimation",
                     "deleteAnimation",
+                    # System operations
                     "getSystemSettings",
                     "updateSystemSettings",
                     "exportDatabase",
@@ -47,11 +74,15 @@ rpgmaker_database_schema = _schema_with_required(
                     "backupDatabase",
                     "restoreDatabase",
                 ],
-                "description": "Database operation to perform.",
+                "description": "Database operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+            },
+            "uuId": {
+                "type": "string",
+                "description": "UUID of the record to access (for get/update/delete operations).",
             },
             "filename": {
                 "type": "string",
-                "description": "Filename for the database item (without extension).",
+                "description": "Filename for the database item (without extension). Used as target file for create operations.",
             },
             "itemData": {
                 "type": "object",
@@ -85,6 +116,7 @@ rpgmaker_database_schema = _schema_with_required(
                 "type": "string",
                 "description": "Path for backup/restore operations.",
             },
+            **PAGINATION_PROPERTIES,
         },
     },
     ["operation"],
@@ -101,29 +133,43 @@ rpgmaker_map_schema = _schema_with_required(
             "operation": {
                 "type": "string",
                 "enum": [
+                    # Map operations
+                    "listMaps",
+                    "getMapById",
                     "getMaps",
                     "createMap",
                     "updateMap",
                     "deleteMap",
                     "getMapData",
                     "setMapData",
+                    # Event operations
+                    "listMapEvents",
+                    "getMapEventById",
                     "getMapEvents",
                     "createMapEvent",
                     "updateMapEvent",
                     "deleteMapEvent",
+                    # Tileset operations
+                    "listTilesets",
+                    "getTilesetById",
                     "getTilesets",
                     "setTileset",
+                    # Settings and utility
                     "getMapSettings",
                     "updateMapSettings",
                     "copyMap",
                     "exportMap",
                     "importMap",
                 ],
-                "description": "Map operation to perform.",
+                "description": "Map operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+            },
+            "uuId": {
+                "type": "string",
+                "description": "UUID of the map record to access (for get/update/delete operations).",
             },
             "filename": {
                 "type": "string",
-                "description": "Map filename (without extension).",
+                "description": "Map filename (without extension). Used as target file for create operations.",
             },
             "mapData": {
                 "type": "object",
@@ -164,6 +210,7 @@ rpgmaker_map_schema = _schema_with_required(
                 "type": "string",
                 "description": "Import file path for map import.",
             },
+            **PAGINATION_PROPERTIES,
         },
     },
     ["operation"],
@@ -180,27 +227,37 @@ rpgmaker_event_schema = _schema_with_required(
             "operation": {
                 "type": "string",
                 "enum": [
+                    # Common event operations
+                    "listCommonEvents",
+                    "getCommonEventById",
                     "getCommonEvents",
                     "createCommonEvent",
                     "updateCommonEvent",
                     "deleteCommonEvent",
+                    # Event command operations
                     "getEventCommands",
                     "createEventCommand",
                     "updateEventCommand",
                     "deleteEventCommand",
+                    # Event page operations
                     "getEventPages",
                     "createEventPage",
                     "updateEventPage",
                     "deleteEventPage",
+                    # Utility
                     "copyEvent",
                     "moveEvent",
                     "validateEvent",
                 ],
-                "description": "Event operation to perform.",
+                "description": "Event operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+            },
+            "uuId": {
+                "type": "string",
+                "description": "UUID of the event record to access (for get/update/delete operations).",
             },
             "filename": {
                 "type": "string",
-                "description": "Event filename (without extension).",
+                "description": "Event filename (without extension). Used as target file for create operations.",
             },
             "eventData": {
                 "type": "object",
@@ -233,6 +290,7 @@ rpgmaker_event_schema = _schema_with_required(
                 "type": "string",
                 "description": "Target filename for copy/move operations.",
             },
+            **PAGINATION_PROPERTIES,
         },
     },
     ["operation"],
@@ -251,26 +309,40 @@ rpgmaker_battle_schema = _schema_with_required(
                 "enum": [
                     "getBattleSettings",
                     "updateBattleSettings",
+                    # Enemy operations
+                    "listEnemies",
+                    "getEnemyById",
                     "getEnemies",
                     "createEnemy",
                     "updateEnemy",
                     "deleteEnemy",
+                    # Troop operations
+                    "listTroops",
+                    "getTroopById",
                     "getTroops",
                     "createTroop",
                     "updateTroop",
                     "deleteTroop",
+                    # Skill operations
+                    "listSkills",
+                    "getSkillById",
                     "getSkills",
                     "createSkill",
                     "updateSkill",
                     "deleteSkill",
+                    # Animation operations
                     "getBattleAnimations",
                     "updateBattleAnimation",
                 ],
-                "description": "Battle system operation to perform.",
+                "description": "Battle system operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
+            },
+            "uuId": {
+                "type": "string",
+                "description": "UUID of the battle item to access (for get/update/delete operations).",
             },
             "filename": {
                 "type": "string",
-                "description": "Filename for the battle item (without extension).",
+                "description": "Filename for the battle item (without extension). Used as target file for create operations.",
             },
             "settingData": {
                 "type": "object",
@@ -297,6 +369,7 @@ rpgmaker_battle_schema = _schema_with_required(
                 "additionalProperties": True,
                 "description": "Animation data for updating.",
             },
+            **PAGINATION_PROPERTIES,
         },
     },
     ["operation"],
@@ -368,21 +441,28 @@ rpgmaker_assets_schema = _schema_with_required(
             "operation": {
                 "type": "string",
                 "enum": [
+                    # Image operations
+                    "listImages",
+                    "getImageById",
                     "getImages",
                     "importImage",
                     "exportImage",
                     "deleteImage",
+                    # Sound operations
+                    "listSounds",
+                    "getSoundById",
                     "getSounds",
                     "importSound",
                     "exportSound",
                     "deleteSound",
+                    # Asset management
                     "getAssetInfo",
                     "organizeAssets",
                     "validateAssets",
                     "backupAssets",
                     "restoreAssets",
                 ],
-                "description": "Asset operation to perform.",
+                "description": "Asset operation to perform. Use 'list*' for lightweight ID lists, 'get*ById' for full data of specific item.",
             },
             "category": {
                 "type": "string",
@@ -404,6 +484,7 @@ rpgmaker_assets_schema = _schema_with_required(
                 "type": "string",
                 "description": "Path for backup/restore operations.",
             },
+            **PAGINATION_PROPERTIES,
         },
     },
     ["operation"],
@@ -511,7 +592,11 @@ rpgmaker_audio_schema = _schema_with_required(
             "operation": {
                 "type": "string",
                 "enum": [
+                    # Audio list operations
+                    "listAudioFiles",
+                    "getAudioFileById",
                     "getAudioList",
+                    # Playback operations
                     "playBgm",
                     "stopBgm",
                     "playBgs",
@@ -519,10 +604,12 @@ rpgmaker_audio_schema = _schema_with_required(
                     "playMe",
                     "playSe",
                     "stopAllAudio",
+                    # Volume operations
                     "setBgmVolume",
                     "setBgsVolume",
                     "setMeVolume",
                     "setSeVolume",
+                    # Settings and file management
                     "getAudioSettings",
                     "updateAudioSettings",
                     "importAudioFile",
@@ -530,7 +617,7 @@ rpgmaker_audio_schema = _schema_with_required(
                     "deleteAudioFile",
                     "getAudioInfo",
                 ],
-                "description": "Audio operation to perform.",
+                "description": "Audio operation to perform. Use 'listAudioFiles' for lightweight ID lists, 'getAudioFileById' for full data of specific file.",
             },
             "category": {
                 "type": "string",
@@ -570,6 +657,7 @@ rpgmaker_audio_schema = _schema_with_required(
                 "type": "string",
                 "description": "Target path for export operations.",
             },
+            **PAGINATION_PROPERTIES,
         },
     },
     ["operation"],

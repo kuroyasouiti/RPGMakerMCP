@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -44,14 +46,21 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         public override IEnumerable<string> SupportedOperations => new[]
         {
+            // Image operations
+            "listImages",
+            "getImageById",
             "getImages",
             "importImage",
             "exportImage",
             "deleteImage",
+            // Sound operations
+            "listSounds",
+            "getSoundById",
             "getSounds",
             "importSound",
             "exportSound",
             "deleteSound",
+            // Asset management
             "getAssetInfo",
             "organizeAssets",
             "validateAssets",
@@ -63,14 +72,21 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             return operation switch
             {
+                // Image operations
+                "listImages" => ListImages(payload),
+                "getImageById" => GetImageById(payload),
                 "getImages" => GetImages(payload),
                 "importImage" => ImportImage(payload),
                 "exportImage" => ExportImage(payload),
                 "deleteImage" => DeleteImage(payload),
+                // Sound operations
+                "listSounds" => ListSounds(payload),
+                "getSoundById" => GetSoundById(payload),
                 "getSounds" => GetSounds(payload),
                 "importSound" => ImportSound(payload),
                 "exportSound" => ExportSound(payload),
                 "deleteSound" => DeleteSound(payload),
+                // Asset management
                 "getAssetInfo" => GetAssetInfo(),
                 "organizeAssets" => OrganizeAssets(payload),
                 "validateAssets" => ValidateAssets(),
@@ -82,11 +98,102 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         protected override bool RequiresCompilationWait(string operation)
         {
-            var readOnlyOperations = new[] { "getImages", "getSounds", "getAssetInfo", "validateAssets" };
+            var readOnlyOperations = new[] {
+                "listImages", "getImageById", "getImages",
+                "listSounds", "getSoundById", "getSounds",
+                "getAssetInfo", "validateAssets"
+            };
             return !readOnlyOperations.Contains(operation);
         }
 
         #region Image Operations
+
+        private object ListImages(Dictionary<string, object> payload)
+        {
+            var category = GetString(payload, "category")?.ToLower();
+            var imagesPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Images");
+
+            if (!Directory.Exists(imagesPath))
+            {
+                return CreatePaginatedResponse("images", new List<Dictionary<string, object>>(), payload);
+            }
+
+            var images = new List<Dictionary<string, object>>();
+
+            if (!string.IsNullOrEmpty(category) && ImageCategories.ContainsKey(category))
+            {
+                var categoryPath = Path.Combine(imagesPath, ImageCategories[category]);
+                if (Directory.Exists(categoryPath))
+                {
+                    images.AddRange(GetImageFileIds(categoryPath, ImageCategories[category]));
+                }
+            }
+            else
+            {
+                foreach (var categoryPair in ImageCategories)
+                {
+                    var categoryPath = Path.Combine(imagesPath, categoryPair.Value);
+                    if (Directory.Exists(categoryPath))
+                    {
+                        images.AddRange(GetImageFileIds(categoryPath, categoryPair.Value));
+                    }
+                }
+            }
+
+            return CreatePaginatedResponse("images", images, payload);
+        }
+
+        private List<Dictionary<string, object>> GetImageFileIds(string path, string category)
+        {
+            var result = new List<Dictionary<string, object>>();
+            var files = Directory.GetFiles(path, "*.png")
+                .Concat(Directory.GetFiles(path, "*.jpg"))
+                .Concat(Directory.GetFiles(path, "*.jpeg"));
+
+            foreach (var file in files)
+            {
+                result.Add(new Dictionary<string, object>
+                {
+                    ["id"] = Path.GetFileName(file),
+                    ["filename"] = Path.GetFileName(file),
+                    ["category"] = category
+                });
+            }
+
+            return result;
+        }
+
+        private object GetImageById(Dictionary<string, object> payload)
+        {
+            var filename = GetString(payload, "filename");
+            var category = GetString(payload, "category")?.ToLower();
+
+            if (string.IsNullOrEmpty(filename))
+            {
+                throw new InvalidOperationException("Filename is required.");
+            }
+
+            if (string.IsNullOrEmpty(category) || !ImageCategories.ContainsKey(category))
+            {
+                throw new InvalidOperationException($"Valid category is required. Available: {string.Join(", ", ImageCategories.Keys)}");
+            }
+
+            var imagePath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Images", ImageCategories[category], filename);
+
+            if (!File.Exists(imagePath))
+            {
+                throw new InvalidOperationException($"Image file not found: {filename} in category {category}");
+            }
+
+            var fileInfo = new FileInfo(imagePath);
+            return CreateSuccessResponse(
+                ("filename", filename),
+                ("category", ImageCategories[category]),
+                ("path", imagePath),
+                ("size", fileInfo.Length),
+                ("lastModified", fileInfo.LastWriteTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"))
+            );
+        }
 
         private object GetImages(Dictionary<string, object> payload)
         {
@@ -262,6 +369,93 @@ namespace MCP.Editor.Handlers.RPGMaker
         #endregion
 
         #region Sound Operations
+
+        private object ListSounds(Dictionary<string, object> payload)
+        {
+            var category = GetString(payload, "category")?.ToLower();
+            var soundsPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Sounds");
+
+            if (!Directory.Exists(soundsPath))
+            {
+                return CreatePaginatedResponse("sounds", new List<Dictionary<string, object>>(), payload);
+            }
+
+            var sounds = new List<Dictionary<string, object>>();
+
+            if (!string.IsNullOrEmpty(category) && SoundCategories.ContainsKey(category))
+            {
+                var categoryPath = Path.Combine(soundsPath, SoundCategories[category]);
+                if (Directory.Exists(categoryPath))
+                {
+                    sounds.AddRange(GetSoundFileIds(categoryPath, SoundCategories[category]));
+                }
+            }
+            else
+            {
+                foreach (var categoryPair in SoundCategories)
+                {
+                    var categoryPath = Path.Combine(soundsPath, categoryPair.Value);
+                    if (Directory.Exists(categoryPath))
+                    {
+                        sounds.AddRange(GetSoundFileIds(categoryPath, categoryPair.Value));
+                    }
+                }
+            }
+
+            return CreatePaginatedResponse("sounds", sounds, payload);
+        }
+
+        private List<Dictionary<string, object>> GetSoundFileIds(string path, string category)
+        {
+            var result = new List<Dictionary<string, object>>();
+            var files = Directory.GetFiles(path, "*.wav")
+                .Concat(Directory.GetFiles(path, "*.mp3"))
+                .Concat(Directory.GetFiles(path, "*.ogg"));
+
+            foreach (var file in files)
+            {
+                result.Add(new Dictionary<string, object>
+                {
+                    ["id"] = Path.GetFileName(file),
+                    ["filename"] = Path.GetFileName(file),
+                    ["category"] = category
+                });
+            }
+
+            return result;
+        }
+
+        private object GetSoundById(Dictionary<string, object> payload)
+        {
+            var filename = GetString(payload, "filename");
+            var category = GetString(payload, "category")?.ToLower();
+
+            if (string.IsNullOrEmpty(filename))
+            {
+                throw new InvalidOperationException("Filename is required.");
+            }
+
+            if (string.IsNullOrEmpty(category) || !SoundCategories.ContainsKey(category))
+            {
+                throw new InvalidOperationException($"Valid category is required. Available: {string.Join(", ", SoundCategories.Keys)}");
+            }
+
+            var soundPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Sounds", SoundCategories[category], filename);
+
+            if (!File.Exists(soundPath))
+            {
+                throw new InvalidOperationException($"Sound file not found: {filename} in category {category}");
+            }
+
+            var fileInfo = new FileInfo(soundPath);
+            return CreateSuccessResponse(
+                ("filename", filename),
+                ("category", SoundCategories[category]),
+                ("path", soundPath),
+                ("size", fileInfo.Length),
+                ("lastModified", fileInfo.LastWriteTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"))
+            );
+        }
 
         private object GetSounds(Dictionary<string, object> payload)
         {
