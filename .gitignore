@@ -95,5 +95,5 @@ Thumbs.db
 # Claude Code
 .claude/
 
-# Null file (Windows artifact)
-nul
+Assets/
+!Assets/RPGMakerMCP
