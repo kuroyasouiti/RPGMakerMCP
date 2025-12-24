@@ -145,7 +145,7 @@ AI Client (Claude/Cursor) <--(MCP)--> Python MCP Server <--(WebSocket)--> Unity 
 
 | Service | Port | URI |
 |---------|------|-----|
-| Unity Bridge | 7070 | `ws://localhost:7070/rpgmaker` |
+| Unity Bridge | 7070 | `ws://localhost:7070/bridge` |
 | MCP Server | stdio | (MCP default) |
 
 ## Troubleshooting

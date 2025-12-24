@@ -116,15 +116,14 @@ MCPServer/
 
 ### WebSocket設定
 
-Unity Bridgeの設定（`config.py`）：
+Unity Bridgeの設定（`config/env.py`）：
 
 | 設定 | 値 |
 |------|-----|
-| URI | `ws://localhost:6400/rpgmaker` |
-| Ping間隔 | 20秒 |
-| Pingタイムアウト | 10秒 |
-| 最大メッセージサイズ | 32MB |
-| コマンドタイムアウト | 60秒 |
+| URI | `ws://localhost:7070/bridge` |
+| Ping間隔 | 接続時に設定 |
+| 最大メッセージサイズ | 10MB |
+| コマンドタイムアウト | 45秒 |
 
 ## 💻 開発
 
@@ -217,7 +216,7 @@ rpgmaker_system(operation='setGameVariable', variableId=1, value=100)
 
 1. Unity Editorが起動しているか確認
 2. **Tools > MCP Assistant** でBridgeが起動しているか確認
-3. ポート6400が使用可能か確認
+3. ポート7070が使用可能か確認
 4. ファイアウォールがブロックしていないか確認
 
 ### タイムアウト

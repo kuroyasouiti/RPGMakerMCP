@@ -1,10 +1,10 @@
-# Contributing to Unity-AI-Forge
+# Contributing to RPGMaker Unite MCP
 
 <div align="center">
 
 **🤝 Welcome Contributors!**
 
-Unity-AI-Forge へのコントリビューションをありがとうございます
+RPGMaker Unite MCP へのコントリビューションをありがとうございます
 
 [📚 Documentation Index](INDEX.md) | [🚀 Getting Started](GETTING_STARTED.md)
 
@@ -58,12 +58,12 @@ git remote add upstream https://github.com/kuroyasouiti/Unity-AI-Forge.git
 
 ```bash
 # Unity Hub で開く
-# Unity Hub > Add > Select 'Unity-AI-Forge' folder
+# Unity Hub > Add > Select 'RPGMakerMCP' folder
 ```
 
 **Requirements:**
-- Unity 2022.3 LTS or later
-- Python 3.11+ (MCP Server開発の場合)
+- Unity 2022.3 LTS or later (Unity 6推奨)
+- Python 3.10+ (MCP Server開発の場合)
 - .NET Standard 2.1
 
 ### 3. Branch を作成
@@ -82,17 +82,17 @@ git checkout -b fix/bug-description
 
 ### C# コーディング規約
 
-Unity-AI-Forge は Microsoft の C# コーディング規約に従います。
+RPGMaker Unite MCP は Microsoft の C# コーディング規約に従います。
 
 #### Naming Conventions
 
 ```csharp
 // ✅ Good
-public class GameKitManager : MonoBehaviour  // PascalCase for classes
+public class RPGMakerDatabaseHandler : MonoBehaviour  // PascalCase for classes
 {
-    public string ManagerId;                 // PascalCase for public fields
+    public string HandlerId;                 // PascalCase for public fields
     private float currentValue;              // camelCase for private fields
-    
+
     public void Initialize(string id)        // PascalCase for methods
     {
         var localVariable = 0;               // camelCase for local variables
@@ -100,9 +100,9 @@ public class GameKitManager : MonoBehaviour  // PascalCase for classes
 }
 
 // ❌ Bad
-public class gamekitmanager                  // Wrong case
+public class rpgmakerdatabasehandler         // Wrong case
 {
-    public string manager_id;                // Snake_case not allowed
+    public string handler_id;                // Snake_case not allowed
     private float CurrentValue;              // Wrong case
 }
 ```
@@ -112,9 +112,9 @@ public class gamekitmanager                  // Wrong case
 ```csharp
 using UnityEngine;                           // Unity usings first
 using System;                                // System usings second
-using UnityAIForge.GameKit;                  // Project usings last
+using RPGMakerMCP.Handlers;                  // Project usings last
 
-namespace UnityAIForge.GameKit               // Namespace matches folder structure
+namespace RPGMakerMCP.Handlers               // Namespace matches folder structure
 {
     /// <summary>
     /// XML documentation for public APIs
@@ -150,11 +150,11 @@ namespace UnityAIForge.GameKit               // Namespace matches folder structu
 ```csharp
 // ✅ Good - Explain why, not what
 // Use Singleton pattern to ensure only one instance
-public static GameKitManager Instance { get; private set; }
+public static McpBridgeService Instance { get; private set; }
 
 // ❌ Bad - States the obvious
 // Set the instance
-public static GameKitManager Instance { get; private set; }
+public static McpBridgeService Instance { get; private set; }
 ```
 
 ### Python コーディング規約
@@ -183,7 +183,7 @@ def ProcessGameObject(GameObjectPath):
 
 ### Conventional Commits
 
-Unity-AI-Forge は [Conventional Commits](https://www.conventionalcommits.org/) を使用します。
+RPGMaker Unite MCP は [Conventional Commits](https://www.conventionalcommits.org/) を使用します。
 
 #### Format
 
@@ -199,22 +199,22 @@ Unity-AI-Forge は [Conventional Commits](https://www.conventionalcommits.org/) 
 
 | Type | 説明 | Example |
 |:---|:---|:---|
-| `feat` | 新機能 | `feat(gamekit): add save/load system` |
-| `fix` | バグ修正 | `fix(actor): resolve movement bug` |
+| `feat` | 新機能 | `feat(rpgmaker): add database export feature` |
+| `fix` | バグ修正 | `fix(map): resolve event creation bug` |
 | `docs` | ドキュメント | `docs(readme): update installation steps` |
-| `style` | コードスタイル | `style(manager): format code` |
-| `refactor` | リファクタリング | `refactor(resource): simplify logic` |
-| `test` | テスト追加 | `test(actor): add unit tests` |
+| `style` | コードスタイル | `style(handler): format code` |
+| `refactor` | リファクタリング | `refactor(bridge): simplify logic` |
+| `test` | テスト追加 | `test(database): add unit tests` |
 | `chore` | ビルド/ツール | `chore(deps): update dependencies` |
 
 #### Examples
 
 ```bash
 # ✅ Good
-feat(gamekit): add Machinations diagram support
-fix(sceneflow): resolve transition bug on scene load
+feat(database): add character export support
+fix(map): resolve event creation bug on map load
 docs(getting-started): add Hello World example
-test(resource-manager): add save/load tests
+test(audio): add playback tests
 
 # ❌ Bad
 Added new feature
@@ -225,11 +225,16 @@ Changes
 
 #### Scope Guidelines
 
-- `gamekit` - GameKit framework
+- `database` - rpgmaker_database tool
+- `map` - rpgmaker_map tool
+- `event` - rpgmaker_event tool
+- `battle` - rpgmaker_battle tool
+- `system` - rpgmaker_system tool
+- `assets` - rpgmaker_assets tool
+- `gamestate` - rpgmaker_gamestate tool
+- `audio` - rpgmaker_audio tool
+- `bridge` - Unity Bridge
 - `mcp` - MCP Server
-- `actor` - GameKitActor
-- `manager` - GameKitManager
-- `resource` - GameKitResourceManager
 - `docs` - Documentation
 - `tests` - Tests
 
@@ -361,17 +366,18 @@ public class Example : MonoBehaviour
 
 ```csharp
 using NUnit.Framework;
-using UnityAIForge.GameKit;
+using RPGMakerMCP.Handlers;
 
-public class GameKitManagerTests
+public class RPGMakerDatabaseHandlerTests
 {
     [Test]
-    public void Initialize_WithValidId_SetsManagerId()
+    public void Execute_GetCharacters_ReturnsCharacterList()
     {
-        var manager = CreateTestManager();
-        manager.Initialize("TestManager");
-        
-        Assert.AreEqual("TestManager", manager.ManagerId);
+        var handler = CreateTestHandler();
+        var result = handler.Execute("getCharacters", new Dictionary<string, object>());
+
+        Assert.IsNotNull(result);
+        Assert.IsTrue(result.ContainsKey("characters"));
     }
 }
 ```
@@ -380,14 +386,18 @@ public class GameKitManagerTests
 
 ```csharp
 [UnityTest]
-public IEnumerator ResourceManager_ProcessFlows_UpdatesResources()
+public IEnumerator DatabaseHandler_CreateCharacter_SavesFile()
 {
-    var manager = CreateResourceManager();
-    manager.AddResource("health", 100);
-    
-    yield return new WaitForSeconds(1f);
-    
-    Assert.Greater(manager.GetResourceValue("health"), 100);
+    var handler = CreateDatabaseHandler();
+    var characterData = new Dictionary<string, object>
+    {
+        ["name"] = "TestHero",
+        ["level"] = 1
+    };
+
+    yield return handler.ExecuteAsync("createCharacter", characterData);
+
+    Assert.IsTrue(File.Exists("Assets/RPGMaker/Storage/Character/JSON/test_hero.json"));
 }
 ```
 
@@ -405,48 +415,51 @@ unity-editor -runTests -testPlatform EditMode
 
 ## 🎨 Design Guidelines
 
-### GameKit Component の作成
+### RPGMaker Handler の作成
 
-新しい GameKit component を追加する場合：
+新しい RPGMaker ハンドラーを追加する場合：
 
-1. **Namespace**: `UnityAIForge.GameKit`
-2. **AddComponentMenu**: `[AddComponentMenu("UnityAIForge/GameKit/YourComponent")]`
+1. **Namespace**: `RPGMakerMCP.Handlers.RPGMaker`
+2. **Base Class**: `BaseCommandHandler` を継承
 3. **Documentation**: XML comments 必須
-4. **Events**: UnityEvent を使用
-5. **Inspector**: CustomEditor を提供
+4. **Registration**: `CommandHandlerInitializer` に登録
 
 #### Template
 
 ```csharp
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Events;
 
-namespace UnityAIForge.GameKit
+namespace RPGMakerMCP.Handlers.RPGMaker
 {
     /// <summary>
-    /// Brief description of your component.
+    /// Brief description of your handler.
     /// </summary>
-    [AddComponentMenu("UnityAIForge/GameKit/YourComponent")]
-    public class YourComponent : MonoBehaviour
+    public class YourHandler : BaseCommandHandler
     {
-        #region Serialized Fields
-        [SerializeField] 
-        [Tooltip("Description of this field")]
-        private string yourField;
-        #endregion
-        
-        #region Events
-        public UnityEvent<string> OnYourEvent;
-        #endregion
-        
-        #region Public API
-        /// <summary>
-        /// Initialize the component.
-        /// </summary>
-        public void Initialize(string parameter)
+        #region Supported Operations
+        public override IEnumerable<string> SupportedOperations => new[]
         {
-            yourField = parameter;
-            OnYourEvent?.Invoke(parameter);
+            "getList",
+            "getById",
+            "create",
+            "update",
+            "delete"
+        };
+        #endregion
+
+        #region Execute
+        public override object Execute(string operation, Dictionary<string, object> payload)
+        {
+            return operation switch
+            {
+                "getList" => HandleGetList(payload),
+                "getById" => HandleGetById(payload),
+                "create" => HandleCreate(payload),
+                "update" => HandleUpdate(payload),
+                "delete" => HandleDelete(payload),
+                _ => throw new System.NotSupportedException($"Unknown operation: {operation}")
+            };
         }
         #endregion
     }
@@ -477,8 +490,8 @@ What you expected to happen
 If applicable, add screenshots
 
 **Environment:**
-- Unity Version: [e.g. 2022.3.10f1]
-- Unity-AI-Forge Version: [e.g. 2.1.0]
+- Unity Version: [e.g. 2022.3.10f1, Unity 6]
+- RPGMaker Unite MCP Version: [e.g. 1.0.0]
 - OS: [e.g. Windows 11]
 
 **Additional context**
