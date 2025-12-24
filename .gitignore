@@ -95,5 +95,7 @@ Thumbs.db
 # Claude Code
 .claude/
 
-Assets/
-!Assets/RPGMakerMCP
+# Assets - RPGMakerMCPのみ同期
+/Assets/*
+!/Assets/RPGMakerMCP/
+/Assets\RPGMakerMCP\MCPServer/.venv/
