@@ -1,0 +1,105 @@
+name: Unity-AI-Forge
+version: 2.4.3
+description: "AI-powered Unity development toolkit - MCP integration with GameKit framework (actors, managers, Machinations economics, UI commands, scene flow, state persistence, Physics2D, sorting layers, character controller, batch sequential execution)"
+author: "Unity-AI-Forge Team"
+license: MIT
+
+# Skill entrypoint (using uv for dependency management)
+# Format: command to run the MCP server in WebSocket mode
+entrypoint: "uv run python src/main.py --transport websocket"
+
+# Runtime environment
+runtime:
+  type: "websocket"
+  python: ">=3.10"
+  platform:
+    - windows
+    - linux
+    - macos
+  websocket:
+    host: "127.0.0.1"
+    port: 6007
+
+# Python dependencies (managed by uv)
+dependencies:
+  - mcp>=0.9.0
+  - uvicorn>=0.27.0
+  - starlette>=0.36.0
+  - websockets>=12.0
+
+# Unity-side prerequisites
+prerequisites:
+  - name: Unity Editor
+    version: ">=2021.3"
+    description: "Unity Editor with MCPBridge installed"
+  - name: MCP Bridge
+    location: "../Assets/UnityAIForge/Editor/MCPBridge/"
+    description: "Unity C# WebSocket Bridge component"
+
+# Skill capabilities
+capabilities:
+  tools: 24
+  categories:
+    - scene_management        # Create, load, save, delete, inspect scenes
+    - gameobject_operations   # Create, move, rename, delete GameObjects with batch support
+    - component_editing       # Add, update, remove components with batch support
+    - asset_management       # Asset operations and importer settings
+    - scriptableobject_crud  # Create, inspect, update, delete, duplicate, find ScriptableObject assets
+    - prefab_management      # Create, update, inspect, instantiate, unpack prefabs
+    - sprite_conversion      # Generate sprites from primitives, SVG, textures, and solid colors
+    - project_settings       # Configure Unity project settings (Physics2D, sorting layers, tags/layers)
+    - batch_operations       # Mid-level batch utilities for Transform, RectTransform, Physics, Camera, UI, Audio, Input, and CharacterController
+    - batch_sequential       # Sequential batch execution with resume capability for complex multi-step operations
+    - gamekit_systems        # High-level GameKit tools: actors, managers, interactions, UI commands, Machinations diagrams, and scene flow
+  
+  gamekit_features:
+    - actor_controller_separation   # Controller-behavior separation with 8 behavior profiles
+    - manager_systems               # Turn-based, realtime, resource pool, event hub, state machines
+    - ui_command_bridge            # UI buttons → Actor/Manager commands (11 command types)
+    - machinations_economics       # Resource flows, converters, triggers (Machinations.io-inspired) with ScriptableObject assets
+    - scene_flow_state_machine     # Scene transitions with additive loading and shared scene groups
+    - interaction_triggers         # Collision/trigger/proximity/input-based interactions with declarative actions
+    - state_persistence            # Save/load system for resources and game state
+    - physics2d_support            # 2D physics configuration (gravity, iterations, thresholds)
+    - sorting_layers_management    # Sorting layer creation, deletion, and inspection
+    - character_controller_presets # CharacterController with 7 optimized presets (fps/tps/platformer/etc)
+
+# MCP configuration
+mcp:
+  transport: websocket
+  default_timeout_ms: 30000
+  server:
+    host: 127.0.0.1
+    port: 6007
+    path: /mcp
+  bridge:
+    host: localhost
+    port: 7070
+    path: /bridge
+    protocol: ws
+
+# Quick examples
+examples:
+  - path: ../Documentation/Examples/01-basic-scene-setup.md
+    description: "Scene, GameObject, and component CRUD walkthrough"
+
+# Documentation structure
+documentation:
+  quick_start: ../Documentation/Installation/QUICKSTART.md
+  readme: ../Documentation/README.md
+  api_reference: ../Documentation/
+  guides: ../Documentation/
+  troubleshooting: ../Documentation/
+
+# Setup and configuration
+setup:
+  install_script:
+    windows: setup/install.ps1
+    linux: setup/install.sh
+    macos: setup/install.sh
+  config_helper: setup/configure.py
+  templates:
+    - config/mcp-config.json.template
+    - config/claude-desktop.json.example
+    - config/cursor.json.example
+    - config/.env.example

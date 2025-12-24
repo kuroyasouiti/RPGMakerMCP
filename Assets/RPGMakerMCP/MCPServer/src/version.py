@@ -1,0 +1,2 @@
+SERVER_NAME = "RPGMaker-Unite-MCP"
+SERVER_VERSION = "1.0.0"

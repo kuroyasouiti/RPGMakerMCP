@@ -1,0 +1,26 @@
+{
+  "name": "com.rpgmakerunite.mcp",
+  "version": "1.0.0",
+  "displayName": "RPGMaker Unite MCP",
+  "description": "AI-powered development toolkit for RPGMaker Unite. MCP bridge with 10 tools for managing RPGMaker game data including database, maps, events, battles, system settings, assets, game state, and audio.",
+  "unity": "2022.3",
+  "keywords": [
+    "mcp",
+    "ai",
+    "claude",
+    "rpgmaker",
+    "rpgmaker-unite",
+    "automation",
+    "editor",
+    "websocket",
+    "ai-assistant"
+  ],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "author": {
+    "name": "RPGMaker Unite MCP"
+  },
+  "type": "tool",
+  "hideInEditor": false
+}

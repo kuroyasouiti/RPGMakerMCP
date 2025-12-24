@@ -1,0 +1,155 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 2
+  tags:
+  - sound
+  - EventSystem
+  - Second
+  - Minute
+  - Canvas
+  - Rain
+  - Storm
+  - Snow
+  - Map LayerDistantView
+  - Map LayerBackground
+  - Map LayerBackgroundCollision
+  - Map LayerA
+  - Map LayerA_Effect
+  - Map LayerB
+  - Map LayerB_Effect
+  - Map LayerShadow
+  - Map LayerC
+  - Map LayerC_Effect
+  - Map LayerD
+  - Map LayerD_Effect
+  - Map LayerForRoute
+  - Map LayerRegion
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - 
+  - Water
+  - UI
+  - 
+  - 
+  - 
+  - 
+  - IgnorePostEffect
+  - Minimap
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Default
+    uniqueID: 0
+    locked: 0
+  - name: MapLayerDistantView
+    uniqueID: 3327932375
+    locked: 0
+  - name: MapLayerBackground
+    uniqueID: 3492061287
+    locked: 0
+  - name: MapLayerBackgroundCollision
+    uniqueID: 1914006983
+    locked: 0
+  - name: MapLayerA
+    uniqueID: 2004791383
+    locked: 0
+  - name: MapLayerA_Effect
+    uniqueID: 83643429
+    locked: 0
+  - name: MapLayerB
+    uniqueID: 2777902955
+    locked: 0
+  - name: MapLayerB_Effect
+    uniqueID: 244363255
+    locked: 0
+  - name: MapLayerShadow
+    uniqueID: 3407805031
+    locked: 0
+  - name: MapLayerC
+    uniqueID: 2930020015
+    locked: 0
+  - name: MapLayerC_Effect
+    uniqueID: 481067851
+    locked: 0
+  - name: MapLayerD
+    uniqueID: 626163003
+    locked: 0
+  - name: MapLayerD_Effect
+    uniqueID: 3582930323
+    locked: 0
+  - name: MapLayerForRoute
+    uniqueID: 390727281
+    locked: 0
+  - name: MapLayerRegion
+    uniqueID: 1589449857
+    locked: 0
+  - name: Runtime_MapCharacterPriorityUnder
+    uniqueID: 274553205
+    locked: 0
+  - name: Runtime_MapCharacterPriorityNormal
+    uniqueID: 3433083401
+    locked: 0
+  - name: Runtime_MapCharacterPriorityUpper
+    uniqueID: 389113061
+    locked: 0
+  - name: Runtime_MapLayerA_Upper
+    uniqueID: 744821491
+    locked: 0
+  - name: Runtime_MapLayerB_Upper
+    uniqueID: 3917254083
+    locked: 0
+  - name: Runtime_MapLayerC_Upper
+    uniqueID: 2130302429
+    locked: 0
+  - name: Runtime_MapLayerD_Upper
+    uniqueID: 375081557
+    locked: 0
+  - name: Runtime_MapCharacterInFlyingPriorityUnder
+    uniqueID: 3308625981
+    locked: 0
+  - name: Runtime_MapCharacterInFlyingPriorityNormal
+    uniqueID: 3194192785
+    locked: 0
+  - name: Runtime_MapCharacterInFlyingPriorityUpper
+    uniqueID: 89185237
+    locked: 0
+  - name: Runtime_MapBalloon
+    uniqueID: 1121460783
+    locked: 0
+  - name: Runtime_Weather
+    uniqueID: 3767727237
+    locked: 0
+  - name: Editor_Event
+    uniqueID: 1454527429
+    locked: 0
+  - name: Editor_Image
+    uniqueID: 3977164401
+    locked: 0
+  - name: Editor_LineGrid
+    uniqueID: 1046982689
+    locked: 0
+  - name: Editor_Cursor
+    uniqueID: 3652581687
+    locked: 0

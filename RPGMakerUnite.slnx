@@ -1,0 +1,11 @@
+﻿<Solution>
+  <Project Path="RPGMaker.CodeBase.Editor.csproj" />
+  <Project Path="RPGMaker.CodeBase.CoreSystem.csproj" />
+  <Project Path="EffekseerEditor.csproj" />
+  <Project Path="RPGMakerMCP.Editor.csproj" />
+  <Project Path="Effekseer.URP.csproj" />
+  <Project Path="Effekseer.csproj" />
+  <Project Path="Effekseer.PostProcessing.csproj" />
+  <Project Path="RPGMaker.Unite.csproj" />
+  <Project Path="Effekseer.HDRP.csproj" />
+</Solution>
