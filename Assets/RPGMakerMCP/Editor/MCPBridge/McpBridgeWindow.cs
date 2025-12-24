@@ -65,7 +65,7 @@ namespace MCP.Editor
             fontStyle = FontStyle.Italic
         };
 
-        [MenuItem("Unity-AI-Forge/MCP Assistant")]
+        [MenuItem("RPGMakerMCP/MCP Assistant")]
         public static void ShowWindow()
         {
             var window = GetWindow<McpBridgeWindow>("MCP Assistant");
@@ -229,7 +229,7 @@ namespace MCP.Editor
         {
             using (new EditorGUILayout.HorizontalScope())
             {
-            GUI.enabled = McpBridgeService.State == McpConnectionState.Disconnected && !_commandRunning;
+                GUI.enabled = McpBridgeService.State == McpConnectionState.Disconnected && !_commandRunning;
                 if (GUILayout.Button("Start Bridge"))
                 {
                     McpBridgeService.Connect();

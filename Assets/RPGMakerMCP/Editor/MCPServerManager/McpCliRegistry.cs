@@ -109,7 +109,9 @@ namespace MCP.Editor.ServerManager
             // Claude Code: claude mcp add --transport stdio <name> -- uv --directory <path> run rpgmaker-mcp
             var isWindows = Application.platform == RuntimePlatform.WindowsEditor;
             var uvCommand = "uv";
-            var args = $"mcp add --transport stdio {McpServerManager.ServerName} -- {uvCommand} --directory \"{serverPath}\" run {McpServerManager.ServerName}";
+            // パスをスラッシュに統一
+            var normalizedPath = serverPath?.Replace("\\", "/") ?? "";
+            var args = $"mcp add --transport stdio {McpServerManager.ServerName} -- {uvCommand} --directory \"{normalizedPath}\" run {McpServerManager.ServerName}";
             return ExecuteCliCommand(cliInfo.command, args, cliInfo.displayName);
         }
 
@@ -184,7 +186,9 @@ namespace MCP.Editor.ServerManager
                 argsBuilder.Append($" --env MCP_BRIDGE_TOKEN={options.BridgeToken}");
             }
 
-            argsBuilder.Append($" -- {uvCommand} --directory \"{options.ServerPath}\" run {McpServerManager.ServerName} {serverArgsBuilder}");
+            // パスをスラッシュに統一
+            var normalizedServerPath = options.ServerPath?.Replace("\\", "/") ?? "";
+            argsBuilder.Append($" -- {uvCommand} --directory \"{normalizedServerPath}\" run {McpServerManager.ServerName} {serverArgsBuilder}");
 
             // 環境変数でプロジェクトパスを渡す場合（一部ツールで有効）
             var envVars = new Dictionary<string, string>();
@@ -844,6 +848,9 @@ namespace MCP.Editor.ServerManager
         {
             var isWindows = Application.platform == RuntimePlatform.WindowsEditor;
 
+            // パスをスラッシュに統一（Windowsでもuvは両方のセパレータを受け入れる）
+            var serverPath = options.ServerPath?.Replace("\\", "/") ?? "";
+
             // uv コマンドの引数を構築
             var args = new JArray();
 
@@ -855,7 +862,7 @@ namespace MCP.Editor.ServerManager
             }
 
             args.Add("--directory");
-            args.Add(options.ServerPath);
+            args.Add(serverPath);
             args.Add("run");
             args.Add(McpServerManager.ServerName);
             args.Add("--bridge-port");

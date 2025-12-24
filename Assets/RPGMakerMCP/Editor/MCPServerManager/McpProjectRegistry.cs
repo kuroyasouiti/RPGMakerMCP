@@ -299,7 +299,8 @@ namespace MCP.Editor.ServerManager
         private static JObject CreateProjectServerEntry(AITool tool = AITool.ClaudeDesktop)
         {
             var settings = McpBridgeSettings.Instance;
-            var installPath = McpServerManager.UserInstallPath;
+            // パスをスラッシュに統一（Windowsでもuvは両方のセパレータを受け入れる）
+            var installPath = McpServerManager.UserInstallPath.Replace("\\", "/");
             var projectPath = GetProjectPath();
             var bridgeToken = settings.BridgeToken;
             var bridgeHost = settings.ServerHost;
@@ -365,8 +366,8 @@ namespace MCP.Editor.ServerManager
 
             if (McpConfigManager.UsesProjectBasedConfig(tool))
             {
-                // Claude Codeのプレビュー形式
-                var projectPath = GetProjectPath().Replace("/", "\\");
+                // Claude Codeのプレビュー形式（パスはスラッシュで統一）
+                var projectPath = GetProjectPath().Replace("\\", "/");
                 preview = new JObject
                 {
                     ["projects"] = new JObject
@@ -409,8 +410,8 @@ namespace MCP.Editor.ServerManager
 
             if (McpConfigManager.UsesProjectBasedConfig(tool))
             {
-                // Claude Code形式
-                var projectPath = GetProjectPath().Replace("/", "\\");
+                // Claude Code形式（パスはスラッシュで統一）
+                var projectPath = GetProjectPath().Replace("\\", "/");
                 config = new JObject
                 {
                     ["projects"] = new JObject
