@@ -1,6 +1,6 @@
 [project]
 name = "rpgmaker-mcp"
-version = "1.0.0"
+version = "1.1.0"
 description = "RPGMaker Unite MCP Server - AI-powered RPG development toolkit with Unity integration, featuring database/map/event/battle management, asset handling, game state control, and audio operations"
 authors = [
     {name = "RPGMaker-MCP Team"}

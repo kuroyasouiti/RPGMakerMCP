@@ -228,7 +228,7 @@ Unity manages `.meta` files automatically. Manual editing can break asset refere
 
 | Service | Port | URI |
 |---------|------|-----|
-| Unity Bridge | 7070 | `ws://localhost:7070/bridge` |
+| Unity Bridge | 6400 | `ws://localhost:6400/rpgmaker` |
 | MCP Server | stdio | (MCP default) |
 
 ---
@@ -324,4 +324,4 @@ Assets/RPGMakerMCP/
 
 ## Version
 
-**RPGMaker Unite MCP v1.0.0**
+**RPGMaker Unite MCP v1.1.0**

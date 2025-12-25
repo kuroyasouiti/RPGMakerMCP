@@ -8,6 +8,7 @@ from websockets.asyncio.client import ClientConnection
 from websockets.protocol import State as ConnectionState
 
 from bridge.bridge_manager import bridge_manager
+from config.constants import network, retry
 from config.env import env
 from logger import logger
 
@@ -55,16 +56,22 @@ class BridgeConnector:
                     # Connection successful - reset attempt count and use configured delay
                     attempt_count = 0
                     delay_seconds = env.bridge_reconnect_ms / 1000
-                except Exception as exc:  # pragma: no cover - defensive
-                    # Use exponential backoff for first few attempts, then settle on configured delay
-                    if attempt_count <= 3:
-                        # Quick retries: 0.5s, 1s, 2s
-                        delay_seconds = 0.5 * (2 ** (attempt_count - 1))
+                except (ConnectionRefusedError, asyncio.TimeoutError) as exc:
+                    # Expected connection errors - use appropriate retry strategy
+                    if attempt_count <= retry.QUICK_RETRY_ATTEMPTS:
+                        delay_seconds = retry.BACKOFF_BASE_DELAY * (2 ** (attempt_count - 1))
                         logger.info("Unity bridge connection attempt %d failed: %s (retrying in %.1fs)", attempt_count, exc, delay_seconds)
                     else:
-                        # After 3 attempts, use configured delay (default 5s)
-                        delay_seconds = max(1.0, env.bridge_reconnect_ms / 1000)
+                        delay_seconds = max(retry.MIN_RETRY_DELAY, env.bridge_reconnect_ms / 1000)
                         logger.warning("Unity bridge connection attempt %d failed: %s (retrying in %.1fs)", attempt_count, exc, delay_seconds)
+                except OSError as exc:
+                    # Network-related OS errors (e.g., network unreachable)
+                    delay_seconds = max(retry.MIN_RETRY_DELAY, env.bridge_reconnect_ms / 1000)
+                    logger.warning("Unity bridge network error on attempt %d: %s (retrying in %.1fs)", attempt_count, exc, delay_seconds)
+                except Exception as exc:  # pragma: no cover - defensive
+                    # Unexpected errors - log with full details
+                    delay_seconds = max(retry.MIN_RETRY_DELAY, env.bridge_reconnect_ms / 1000)
+                    logger.exception("Unexpected error on Unity bridge connection attempt %d: %s", attempt_count, exc)
         finally:
             self._task = None
 
@@ -82,9 +89,9 @@ class BridgeConnector:
             # Connect with compatible settings for Unity's custom WebSocket implementation
             async with websockets.connect(
                 url,
-                open_timeout=10,
-                close_timeout=10,
-                max_size=10 * 1024 * 1024,  # 10MB max message size
+                open_timeout=network.WEBSOCKET_OPEN_TIMEOUT,
+                close_timeout=network.WEBSOCKET_CLOSE_TIMEOUT,
+                max_size=network.MAX_MESSAGE_SIZE,
                 compression=None,  # Disable compression for compatibility
                 ping_interval=None,  # Disable automatic ping (we handle it manually)
                 ping_timeout=None,
@@ -111,18 +118,29 @@ class BridgeConnector:
 
         async def ping_loop() -> None:
             consecutive_failures = 0
-            max_failures = 3  # Allow 3 consecutive ping failures before giving up
 
             while not self._stop_event.is_set():
                 await asyncio.sleep(ping_interval)
                 try:
                     await bridge_manager.send_ping()
                     consecutive_failures = 0  # Reset on success
+                except asyncio.TimeoutError:
+                    consecutive_failures += 1
+                    logger.warning("Unity bridge ping timeout (attempt %d/%d)", consecutive_failures, network.MAX_PING_FAILURES)
+                    if consecutive_failures >= network.MAX_PING_FAILURES:
+                        logger.error("Unity bridge ping timed out %d times consecutively - closing connection", network.MAX_PING_FAILURES)
+                        return
+                except ConnectionError as exc:
+                    consecutive_failures += 1
+                    logger.warning("Unity bridge ping connection error (attempt %d/%d): %s", consecutive_failures, network.MAX_PING_FAILURES, exc)
+                    if consecutive_failures >= network.MAX_PING_FAILURES:
+                        logger.error("Unity bridge ping failed %d times consecutively - closing connection", network.MAX_PING_FAILURES)
+                        return
                 except Exception as exc:  # pragma: no cover - defensive
                     consecutive_failures += 1
-                    logger.warning("Unity bridge ping failed (attempt %d/%d): %s", consecutive_failures, max_failures, exc)
-                    if consecutive_failures >= max_failures:
-                        logger.error("Unity bridge ping failed %d times consecutively - closing connection", max_failures)
+                    logger.warning("Unity bridge ping failed (attempt %d/%d): %s", consecutive_failures, network.MAX_PING_FAILURES, exc)
+                    if consecutive_failures >= network.MAX_PING_FAILURES:
+                        logger.error("Unity bridge ping failed %d times consecutively - closing connection", network.MAX_PING_FAILURES)
                         return
 
         ping_task = asyncio.create_task(ping_loop())

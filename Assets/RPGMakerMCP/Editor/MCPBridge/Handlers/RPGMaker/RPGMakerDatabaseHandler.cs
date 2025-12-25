@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
+using MCP.Editor.Config;
+using MCP.Editor.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RPGMaker.Codebase.CoreSystem.Knowledge.Enum;
 using UnityEditor;
 using UnityEngine;
 
@@ -13,11 +16,15 @@ namespace MCP.Editor.Handlers.RPGMaker
     /// <summary>
     /// RPGMaker database management handler.
     /// Handles operations for characters, items, animations, and system settings.
+    /// Uses EditorDataService for CRUD operations via the RPGMaker Editor API.
     /// </summary>
     public class RPGMakerDatabaseHandler : BaseCommandHandler
     {
         public override string Category => "rpgMakerDatabase";
         public override string Version => "1.0.0";
+
+        // Access the EditorDataService singleton for database operations
+        private EditorDataService DataService => EditorDataService.Instance;
 
         public override IEnumerable<string> SupportedOperations => new[]
         {
@@ -131,133 +138,54 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object ListCharacters(Dictionary<string, object> payload)
         {
-            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            if (!Directory.Exists(characterPath))
+            var characters = DataService.LoadCharacters();
+            var result = characters.Select(c => new Dictionary<string, object>
             {
-                return CreatePaginatedResponse("characters", new List<Dictionary<string, object>>(), payload);
-            }
+                ["uuId"] = c.uuId,
+                ["name"] = c.basic?.name ?? "Unnamed",
+                ["charaType"] = c.charaType,
+                ["filename"] = "characterActor"
+            }).ToList();
 
-            var characterFiles = Directory.GetFiles(characterPath, "*.json");
-            var characters = new List<Dictionary<string, object>>();
-
-            foreach (var file in characterFiles)
-            {
-                try
-                {
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-
-                    if (data is JArray array)
-                    {
-                        foreach (var item in array)
-                        {
-                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
-                            var name = item["basic"]?["name"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed";
-                            if (!string.IsNullOrEmpty(uuId))
-                            {
-                                characters.Add(new Dictionary<string, object>
-                                {
-                                    ["uuId"] = uuId,
-                                    ["name"] = name,
-                                    ["filename"] = filename
-                                });
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse character file {file}: {ex.Message}");
-                }
-            }
-
-            return CreatePaginatedResponse("characters", characters, payload);
+            return CreatePaginatedResponse("characters", result, payload);
         }
 
         private object GetCharacterById(Dictionary<string, object> payload)
         {
-            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             if (string.IsNullOrEmpty(uuId))
             {
                 throw new InvalidOperationException("uuId is required.");
             }
 
-            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            if (!Directory.Exists(characterPath))
+            var character = DataService.LoadCharacterById(uuId);
+            if (character == null)
             {
-                throw new InvalidOperationException("Character directory not found.");
+                throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
             }
 
-            var characterFiles = Directory.GetFiles(characterPath, "*.json");
-
-            foreach (var file in characterFiles)
-            {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    foreach (var item in array)
-                    {
-                        var itemUuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("filename", Path.GetFileNameWithoutExtension(file)),
-                                ("data", ConvertJTokenToObject(item))
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", character.uuId),
+                ("filename", "characterActor"),
+                ("data", DataModelMapper.ToDict(character))
+            );
         }
 
         private object GetCharacters(Dictionary<string, object> payload)
         {
-            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            if (!Directory.Exists(characterPath))
+            var characters = DataService.LoadCharacters();
+            var result = characters.Select(c => new Dictionary<string, object>
             {
-                return CreateSuccessResponse(("characters", new List<object>()), ("message", "No character data found."));
-            }
-
-            var characterFiles = Directory.GetFiles(characterPath, "*.json");
-            var characters = new List<Dictionary<string, object>>();
-
-            foreach (var file in characterFiles)
-            {
-                try
-                {
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-
-                    if (data is JArray array)
-                    {
-                        foreach (var item in array)
-                        {
-                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
-                            if (!string.IsNullOrEmpty(uuId))
-                            {
-                                characters.Add(new Dictionary<string, object>
-                                {
-                                    ["uuId"] = uuId,
-                                    ["name"] = item["basic"]?["name"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed",
-                                    ["filename"] = filename,
-                                    ["data"] = ConvertJTokenToObject(item)
-                                });
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse character file {file}: {ex.Message}");
-                }
-            }
+                ["uuId"] = c.uuId,
+                ["name"] = c.basic?.name ?? "Unnamed",
+                ["charaType"] = c.charaType,
+                ["filename"] = "characterActor",
+                ["data"] = DataModelMapper.ToDict(c)
+            }).ToList();
 
             return CreateSuccessResponse(
-                ("characters", characters),
-                ("count", characters.Count)
+                ("characters", result),
+                ("count", result.Count)
             );
         }
 
@@ -265,45 +193,38 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             var characterData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "characterData");
-            var targetFile = GetString(payload, "filename") ?? "characterActor";
 
-            if (characterData == null)
+            // Get optional name and type from payload
+            string name = null;
+            int charaType = (int)ActorTypeEnum.ACTOR;
+
+            if (characterData != null)
             {
-                throw new InvalidOperationException("Character data is required.");
+                if (characterData.TryGetValue("basic", out var basicObj) && basicObj is Dictionary<string, object> basic)
+                {
+                    if (basic.TryGetValue("name", out var nameObj))
+                        name = nameObj?.ToString();
+                }
+                if (characterData.TryGetValue("charaType", out var typeObj))
+                    charaType = Convert.ToInt32(typeObj);
             }
 
-            // Generate UUID if not provided
-            if (!characterData.ContainsKey("uuId") || string.IsNullOrEmpty(characterData["uuId"]?.ToString()))
+            // Create character using EditorDataService
+            var newCharacter = DataService.CreateCharacter(name, charaType);
+
+            // Apply any additional data from payload using partial update
+            if (characterData != null && characterData.Count > 0)
             {
-                characterData["uuId"] = Guid.NewGuid().ToString();
+                DataService.UpdateCharacter(newCharacter.uuId, c =>
+                {
+                    DataModelMapper.ApplyPartialUpdate(c, characterData);
+                });
             }
-
-            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            Directory.CreateDirectory(characterPath);
-
-            var filePath = Path.Combine(characterPath, $"{targetFile}.json");
-
-            JArray array;
-            if (File.Exists(filePath))
-            {
-                var existing = ReadJsonFile(filePath);
-                array = existing as JArray ?? new JArray();
-            }
-            else
-            {
-                array = new JArray();
-            }
-
-            array.Add(JObject.FromObject(characterData));
-            WriteJsonFile(filePath, array);
-
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("uuId", characterData["uuId"]),
-                ("filename", targetFile),
-                ("message", $"Character created successfully.")
+                ("uuId", newCharacter.uuId),
+                ("filename", "characterActor"),
+                ("message", "Character created successfully.")
             );
         }
 
@@ -312,7 +233,6 @@ namespace MCP.Editor.Handlers.RPGMaker
             var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             var characterData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "characterData");
-            var partialUpdate = GetBool(payload, "partial", false);
 
             if (string.IsNullOrEmpty(uuId))
             {
@@ -324,48 +244,16 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("Character data is required.");
             }
 
-            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            var characterFiles = Directory.GetFiles(characterPath, "*.json");
-
-            foreach (var file in characterFiles)
+            // Update using EditorDataService
+            DataService.UpdateCharacter(uuId, c =>
             {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    for (int i = 0; i < array.Count; i++)
-                    {
-                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            if (partialUpdate)
-                            {
-                                var existing = array[i] as JObject;
-                                existing?.Merge(JObject.FromObject(characterData), new JsonMergeSettings
-                                {
-                                    MergeArrayHandling = MergeArrayHandling.Replace,
-                                    MergeNullValueHandling = MergeNullValueHandling.Merge
-                                });
-                            }
-                            else
-                            {
-                                characterData["uuId"] = uuId; // Preserve UUID
-                                array[i] = JObject.FromObject(characterData);
-                            }
+                DataModelMapper.ApplyPartialUpdate(c, characterData);
+            });
 
-                            WriteJsonFile(file, array);
-                            AssetDatabase.Refresh();
-                            RefreshHierarchy();
-
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("message", $"Character updated successfully.")
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", uuId),
+                ("message", "Character updated successfully.")
+            );
         }
 
         private object DeleteCharacter(Dictionary<string, object> payload)
@@ -377,34 +265,13 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("uuId is required.");
             }
 
-            var characterPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Character", "JSON");
-            var characterFiles = Directory.GetFiles(characterPath, "*.json");
+            // Delete using EditorDataService
+            DataService.DeleteCharacter(uuId);
 
-            foreach (var file in characterFiles)
-            {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    for (int i = array.Count - 1; i >= 0; i--)
-                    {
-                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            array.RemoveAt(i);
-                            WriteJsonFile(file, array);
-                            AssetDatabase.Refresh();
-                            RefreshHierarchy();
-
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("message", $"Character deleted successfully.")
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Character with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", uuId),
+                ("message", "Character deleted successfully.")
+            );
         }
 
         #endregion
@@ -413,172 +280,86 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object ListItems(Dictionary<string, object> payload)
         {
-            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            if (!Directory.Exists(itemPath))
+            var items = DataService.LoadItems();
+            var result = items.Select(i => new Dictionary<string, object>
             {
-                return CreatePaginatedResponse("items", new List<Dictionary<string, object>>(), payload);
-            }
+                ["uuId"] = i.basic.id,
+                ["name"] = i.basic.name ?? "Unnamed",
+                ["filename"] = "item"
+            }).ToList();
 
-            var itemFiles = Directory.GetFiles(itemPath, "*.json");
-            var items = new List<Dictionary<string, object>>();
-
-            foreach (var file in itemFiles)
-            {
-                try
-                {
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-
-                    if (data is JArray array)
-                    {
-                        foreach (var item in array)
-                        {
-                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
-                            var name = item["basic"]?["name"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed";
-                            if (!string.IsNullOrEmpty(uuId))
-                            {
-                                items.Add(new Dictionary<string, object>
-                                {
-                                    ["uuId"] = uuId,
-                                    ["name"] = name,
-                                    ["filename"] = filename
-                                });
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse item file {file}: {ex.Message}");
-                }
-            }
-
-            return CreatePaginatedResponse("items", items, payload);
+            return CreatePaginatedResponse("items", result, payload);
         }
 
         private object GetItemById(Dictionary<string, object> payload)
         {
-            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             if (string.IsNullOrEmpty(uuId))
             {
                 throw new InvalidOperationException("uuId is required.");
             }
 
-            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            if (!Directory.Exists(itemPath))
+            var item = DataService.LoadItemById(uuId);
+            if (item == null)
             {
-                throw new InvalidOperationException("Item directory not found.");
+                throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
             }
 
-            var itemFiles = Directory.GetFiles(itemPath, "*.json");
-
-            foreach (var file in itemFiles)
-            {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    foreach (var item in array)
-                    {
-                        var itemUuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("filename", Path.GetFileNameWithoutExtension(file)),
-                                ("data", ConvertJTokenToObject(item))
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", item.basic.id),
+                ("filename", "item"),
+                ("data", DataModelMapper.ToDict(item))
+            );
         }
 
         private object GetItems(Dictionary<string, object> payload)
         {
-            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            if (!Directory.Exists(itemPath))
+            var items = DataService.LoadItems();
+            var result = items.Select(i => new Dictionary<string, object>
             {
-                return CreateSuccessResponse(("items", new List<object>()), ("message", "No item data found."));
-            }
-
-            var itemFiles = Directory.GetFiles(itemPath, "*.json");
-            var items = new List<Dictionary<string, object>>();
-
-            foreach (var file in itemFiles)
-            {
-                try
-                {
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-                    if (data is JArray array)
-                    {
-                        foreach (var item in array)
-                        {
-                            var uuId = item["uuId"]?.ToString() ?? item["id"]?.ToString();
-                            items.Add(new Dictionary<string, object>
-                            {
-                                ["uuId"] = uuId,
-                                ["filename"] = filename,
-                                ["data"] = ConvertJTokenToObject(item)
-                            });
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse item file {file}: {ex.Message}");
-                }
-            }
+                ["uuId"] = i.basic.id,
+                ["name"] = i.basic.name ?? "Unnamed",
+                ["filename"] = "item",
+                ["data"] = DataModelMapper.ToDict(i)
+            }).ToList();
 
             return CreateSuccessResponse(
-                ("items", items),
-                ("count", items.Count)
+                ("items", result),
+                ("count", result.Count)
             );
         }
 
         private object CreateItem(Dictionary<string, object> payload)
         {
             var itemData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData");
-            var targetFile = GetString(payload, "filename") ?? "item";
 
-            if (itemData == null)
+            // Get optional name from payload
+            string name = null;
+            if (itemData != null)
             {
-                throw new InvalidOperationException("Item data is required.");
+                if (itemData.TryGetValue("basic", out var basicObj) && basicObj is Dictionary<string, object> basic)
+                {
+                    if (basic.TryGetValue("name", out var nameObj))
+                        name = nameObj?.ToString();
+                }
             }
 
-            if (!itemData.ContainsKey("uuId") || string.IsNullOrEmpty(itemData["uuId"]?.ToString()))
+            // Create item using EditorDataService
+            var newItem = DataService.CreateItem(name);
+
+            // Apply any additional data from payload
+            if (itemData != null && itemData.Count > 0)
             {
-                itemData["uuId"] = Guid.NewGuid().ToString();
+                DataService.UpdateItem(newItem.basic.id, i =>
+                {
+                    DataModelMapper.ApplyPartialUpdate(i, itemData);
+                });
             }
-
-            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            Directory.CreateDirectory(itemPath);
-
-            var filePath = Path.Combine(itemPath, $"{targetFile}.json");
-
-            JArray array;
-            if (File.Exists(filePath))
-            {
-                var existing = ReadJsonFile(filePath);
-                array = existing as JArray ?? new JArray();
-            }
-            else
-            {
-                array = new JArray();
-            }
-
-            array.Add(JObject.FromObject(itemData));
-            WriteJsonFile(filePath, array);
-
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("uuId", itemData["uuId"]),
-                ("filename", targetFile),
-                ("message", $"Item created successfully.")
+                ("uuId", newItem.basic.id),
+                ("filename", "item"),
+                ("message", "Item created successfully.")
             );
         }
 
@@ -586,7 +367,6 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             var itemData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData");
-            var partialUpdate = GetBool(payload, "partial", false);
 
             if (string.IsNullOrEmpty(uuId))
             {
@@ -598,48 +378,16 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("Item data is required.");
             }
 
-            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            var itemFiles = Directory.GetFiles(itemPath, "*.json");
-
-            foreach (var file in itemFiles)
+            // Update using EditorDataService
+            DataService.UpdateItem(uuId, i =>
             {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    for (int i = 0; i < array.Count; i++)
-                    {
-                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            if (partialUpdate)
-                            {
-                                var existing = array[i] as JObject;
-                                existing?.Merge(JObject.FromObject(itemData), new JsonMergeSettings
-                                {
-                                    MergeArrayHandling = MergeArrayHandling.Replace,
-                                    MergeNullValueHandling = MergeNullValueHandling.Merge
-                                });
-                            }
-                            else
-                            {
-                                itemData["uuId"] = uuId;
-                                array[i] = JObject.FromObject(itemData);
-                            }
+                DataModelMapper.ApplyPartialUpdate(i, itemData);
+            });
 
-                            WriteJsonFile(file, array);
-                            AssetDatabase.Refresh();
-                            RefreshHierarchy();
-
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("message", $"Item updated successfully.")
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", uuId),
+                ("message", "Item updated successfully.")
+            );
         }
 
         private object DeleteItem(Dictionary<string, object> payload)
@@ -651,34 +399,13 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("uuId is required.");
             }
 
-            var itemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Item", "JSON");
-            var itemFiles = Directory.GetFiles(itemPath, "*.json");
+            // Delete using EditorDataService
+            DataService.DeleteItem(uuId);
 
-            foreach (var file in itemFiles)
-            {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    for (int i = array.Count - 1; i >= 0; i--)
-                    {
-                        var itemUuId = array[i]["uuId"]?.ToString() ?? array[i]["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            array.RemoveAt(i);
-                            WriteJsonFile(file, array);
-                            AssetDatabase.Refresh();
-                            RefreshHierarchy();
-
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("message", $"Item deleted successfully.")
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Item with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", uuId),
+                ("message", "Item deleted successfully.")
+            );
         }
 
         #endregion
@@ -687,128 +414,52 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object ListAnimations(Dictionary<string, object> payload)
         {
-            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            if (!Directory.Exists(animationPath))
+            var animations = DataService.LoadAnimations();
+            var result = animations.Select(a => new Dictionary<string, object>
             {
-                return CreatePaginatedResponse("animations", new List<Dictionary<string, object>>(), payload);
-            }
+                ["uuId"] = a.id,
+                ["name"] = a.particleName ?? "Unnamed",
+                ["filename"] = "animation"
+            }).ToList();
 
-            var animationFiles = Directory.GetFiles(animationPath, "*.json");
-            var animations = new List<Dictionary<string, object>>();
-
-            foreach (var file in animationFiles)
-            {
-                try
-                {
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-
-                    if (data is JArray array)
-                    {
-                        foreach (var item in array)
-                        {
-                            var uuId = item["id"]?.ToString();
-                            var name = item["particleName"]?.ToString() ?? item["name"]?.ToString() ?? "Unnamed";
-                            if (!string.IsNullOrEmpty(uuId))
-                            {
-                                animations.Add(new Dictionary<string, object>
-                                {
-                                    ["uuId"] = uuId,
-                                    ["name"] = name,
-                                    ["filename"] = filename
-                                });
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse animation file {file}: {ex.Message}");
-                }
-            }
-
-            return CreatePaginatedResponse("animations", animations, payload);
+            return CreatePaginatedResponse("animations", result, payload);
         }
 
         private object GetAnimationById(Dictionary<string, object> payload)
         {
-            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id") ?? GetString(payload, "filename");
+            var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             if (string.IsNullOrEmpty(uuId))
             {
                 throw new InvalidOperationException("uuId is required.");
             }
 
-            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            if (!Directory.Exists(animationPath))
+            var animation = DataService.LoadAnimationById(uuId);
+            if (animation == null)
             {
-                throw new InvalidOperationException("Animation directory not found.");
+                throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
             }
 
-            var animationFiles = Directory.GetFiles(animationPath, "*.json");
-
-            foreach (var file in animationFiles)
-            {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    foreach (var item in array)
-                    {
-                        var itemUuId = item["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("filename", Path.GetFileNameWithoutExtension(file)),
-                                ("data", ConvertJTokenToObject(item))
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", animation.id),
+                ("filename", "animation"),
+                ("data", DataModelMapper.ToDict(animation))
+            );
         }
 
         private object GetAnimations(Dictionary<string, object> payload)
         {
-            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            if (!Directory.Exists(animationPath))
+            var animations = DataService.LoadAnimations();
+            var result = animations.Select(a => new Dictionary<string, object>
             {
-                return CreateSuccessResponse(("animations", new List<object>()), ("message", "No animation data found."));
-            }
-
-            var animationFiles = Directory.GetFiles(animationPath, "*.json");
-            var animations = new List<Dictionary<string, object>>();
-
-            foreach (var file in animationFiles)
-            {
-                try
-                {
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-                    if (data is JArray array)
-                    {
-                        foreach (var item in array)
-                        {
-                            var uuId = item["id"]?.ToString();
-                            animations.Add(new Dictionary<string, object>
-                            {
-                                ["uuId"] = uuId,
-                                ["filename"] = filename,
-                                ["data"] = ConvertJTokenToObject(item)
-                            });
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse animation file {file}: {ex.Message}");
-                }
-            }
+                ["uuId"] = a.id,
+                ["name"] = a.particleName ?? "Unnamed",
+                ["filename"] = "animation",
+                ["data"] = DataModelMapper.ToDict(a)
+            }).ToList();
 
             return CreateSuccessResponse(
-                ("animations", animations),
-                ("count", animations.Count)
+                ("animations", result),
+                ("count", result.Count)
             );
         }
 
@@ -816,44 +467,31 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             var animationData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "animationData");
-            var targetFile = GetString(payload, "filename") ?? "animation";
 
-            if (animationData == null)
+            // Get optional name from payload
+            string name = null;
+            if (animationData != null)
             {
-                throw new InvalidOperationException("Animation data is required.");
+                if (animationData.TryGetValue("particleName", out var nameObj))
+                    name = nameObj?.ToString();
             }
 
-            if (!animationData.ContainsKey("id") || string.IsNullOrEmpty(animationData["id"]?.ToString()))
+            // Create animation using EditorDataService
+            var newAnimation = DataService.CreateAnimation(name);
+
+            // Apply any additional data from payload
+            if (animationData != null && animationData.Count > 0)
             {
-                animationData["id"] = Guid.NewGuid().ToString();
+                DataService.UpdateAnimation(newAnimation.id, a =>
+                {
+                    DataModelMapper.ApplyPartialUpdate(a, animationData);
+                });
             }
-
-            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            Directory.CreateDirectory(animationPath);
-
-            var filePath = Path.Combine(animationPath, $"{targetFile}.json");
-
-            JArray array;
-            if (File.Exists(filePath))
-            {
-                var existing = ReadJsonFile(filePath);
-                array = existing as JArray ?? new JArray();
-            }
-            else
-            {
-                array = new JArray();
-            }
-
-            array.Add(JObject.FromObject(animationData));
-            WriteJsonFile(filePath, array);
-
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
 
             return CreateSuccessResponse(
-                ("uuId", animationData["id"]),
-                ("filename", targetFile),
-                ("message", $"Animation created successfully.")
+                ("uuId", newAnimation.id),
+                ("filename", "animation"),
+                ("message", "Animation created successfully.")
             );
         }
 
@@ -862,7 +500,6 @@ namespace MCP.Editor.Handlers.RPGMaker
             var uuId = GetString(payload, "uuId") ?? GetString(payload, "id");
             var animationData = GetPayloadValue<Dictionary<string, object>>(payload, "itemData")
                 ?? GetPayloadValue<Dictionary<string, object>>(payload, "animationData");
-            var partialUpdate = GetBool(payload, "partial", false);
 
             if (string.IsNullOrEmpty(uuId))
             {
@@ -874,48 +511,16 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("Animation data is required.");
             }
 
-            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            var animationFiles = Directory.GetFiles(animationPath, "*.json");
-
-            foreach (var file in animationFiles)
+            // Update using EditorDataService
+            DataService.UpdateAnimation(uuId, a =>
             {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    for (int i = 0; i < array.Count; i++)
-                    {
-                        var itemUuId = array[i]["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            if (partialUpdate)
-                            {
-                                var existing = array[i] as JObject;
-                                existing?.Merge(JObject.FromObject(animationData), new JsonMergeSettings
-                                {
-                                    MergeArrayHandling = MergeArrayHandling.Replace,
-                                    MergeNullValueHandling = MergeNullValueHandling.Merge
-                                });
-                            }
-                            else
-                            {
-                                animationData["id"] = uuId;
-                                array[i] = JObject.FromObject(animationData);
-                            }
+                DataModelMapper.ApplyPartialUpdate(a, animationData);
+            });
 
-                            WriteJsonFile(file, array);
-                            AssetDatabase.Refresh();
-                            RefreshHierarchy();
-
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("message", $"Animation updated successfully.")
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", uuId),
+                ("message", "Animation updated successfully.")
+            );
         }
 
         private object DeleteAnimation(Dictionary<string, object> payload)
@@ -927,34 +532,13 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("uuId is required.");
             }
 
-            var animationPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Animation", "JSON");
-            var animationFiles = Directory.GetFiles(animationPath, "*.json");
+            // Delete using EditorDataService
+            DataService.DeleteAnimation(uuId);
 
-            foreach (var file in animationFiles)
-            {
-                var data = ReadJsonFile(file);
-                if (data is JArray array)
-                {
-                    for (int i = array.Count - 1; i >= 0; i--)
-                    {
-                        var itemUuId = array[i]["id"]?.ToString();
-                        if (itemUuId == uuId)
-                        {
-                            array.RemoveAt(i);
-                            WriteJsonFile(file, array);
-                            AssetDatabase.Refresh();
-                            RefreshHierarchy();
-
-                            return CreateSuccessResponse(
-                                ("uuId", uuId),
-                                ("message", $"Animation deleted successfully.")
-                            );
-                        }
-                    }
-                }
-            }
-
-            throw new InvalidOperationException($"Animation with uuId '{uuId}' not found.");
+            return CreateSuccessResponse(
+                ("uuId", uuId),
+                ("message", "Animation deleted successfully.")
+            );
         }
 
         #endregion
@@ -963,71 +547,37 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object GetSystemSettings()
         {
-            var systemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "System");
-            if (!Directory.Exists(systemPath))
+            var settings = DataService.LoadSystemSettings();
+            if (settings == null)
             {
-                return CreateSuccessResponse(("settings", new Dictionary<string, object>()), ("message", "No system settings found."));
+                return CreateSuccessResponse(
+                    ("settings", new Dictionary<string, object>()),
+                    ("message", "No system settings found.")
+                );
             }
 
-            var systemFiles = Directory.GetFiles(systemPath, "*.json");
-            var systemSettings = new Dictionary<string, object>();
-
-            foreach (var file in systemFiles)
-            {
-                try
-                {
-                    var id = Path.GetFileNameWithoutExtension(file);
-                    var data = ReadJsonFile(file);
-                    systemSettings[id] = ConvertJTokenToObject(data);
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse system file {file}: {ex.Message}");
-                }
-            }
-
-            return CreateSuccessResponse(("settings", systemSettings));
+            return CreateSuccessResponse(
+                ("settings", DataModelMapper.ToDict(settings))
+            );
         }
 
         private object UpdateSystemSettings(Dictionary<string, object> payload)
         {
-            var id = GetId(payload);
             var settingData = GetPayloadValue<Dictionary<string, object>>(payload, "settingData");
-            var partialUpdate = GetBool(payload, "partial", false);
-
-            if (string.IsNullOrEmpty(id))
-            {
-                throw new InvalidOperationException("ID is required.");
-            }
 
             if (settingData == null)
             {
                 throw new InvalidOperationException("Setting data is required.");
             }
 
-            var systemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "System");
-            Directory.CreateDirectory(systemPath);
-
-            var filePath = Path.Combine(systemPath, $"{id}.json");
-
-            JToken finalData;
-            if (partialUpdate && File.Exists(filePath))
+            // Update using EditorDataService
+            DataService.UpdateSystemSettings(s =>
             {
-                var existing = ReadJsonFile(filePath);
-                finalData = MergeData(existing, settingData);
-            }
-            else
-            {
-                finalData = JToken.FromObject(settingData);
-            }
-
-            WriteJsonFile(filePath, finalData);
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
+                DataModelMapper.ApplyPartialUpdate(s, settingData);
+            });
 
             return CreateSuccessResponse(
-                ("id", id),
-                ("message", $"System setting '{id}' updated successfully.")
+                ("message", "System settings updated successfully.")
             );
         }
 
@@ -1038,9 +588,16 @@ namespace MCP.Editor.Handlers.RPGMaker
         private object ExportDatabase(Dictionary<string, object> payload)
         {
             var exportPath = GetString(payload, "exportPath");
+            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
             if (string.IsNullOrEmpty(exportPath))
             {
-                exportPath = Path.Combine(Application.dataPath, "..", "RPGMaker_Database_Export");
+                exportPath = Path.Combine(projectRoot, "RPGMaker_Database_Export");
+            }
+            else
+            {
+                // Validate export path is within project directory
+                exportPath = McpBridgeConstants.ValidateAndNormalizePath(exportPath, projectRoot);
             }
 
             var sourcePath = Path.Combine(Application.dataPath, "RPGMaker", "Storage");
@@ -1062,16 +619,25 @@ namespace MCP.Editor.Handlers.RPGMaker
         private object ImportDatabase(Dictionary<string, object> payload)
         {
             var importPath = GetString(payload, "importPath");
+            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            if (string.IsNullOrEmpty(importPath) || !Directory.Exists(importPath))
+            if (string.IsNullOrEmpty(importPath))
             {
-                throw new InvalidOperationException("Valid import path is required.");
+                throw new InvalidOperationException("Import path is required.");
+            }
+
+            // Validate import path is within project directory
+            importPath = McpBridgeConstants.ValidateAndNormalizePath(importPath, projectRoot);
+
+            if (!Directory.Exists(importPath))
+            {
+                throw new InvalidOperationException($"Import path does not exist: '{importPath}'.");
             }
 
             var targetPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage");
 
             // Create backup before import
-            var backupPath = Path.Combine(Application.dataPath, "..", $"RPGMaker_Backup_{DateTime.Now:yyyyMMdd_HHmmss}");
+            var backupPath = Path.Combine(projectRoot, $"RPGMaker_Backup_{DateTime.Now:yyyyMMdd_HHmmss}");
             if (Directory.Exists(targetPath))
             {
                 CopyDirectory(targetPath, backupPath);
@@ -1091,9 +657,16 @@ namespace MCP.Editor.Handlers.RPGMaker
         private object BackupDatabase(Dictionary<string, object> payload)
         {
             var backupPath = GetString(payload, "backupPath");
+            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+
             if (string.IsNullOrEmpty(backupPath))
             {
-                backupPath = Path.Combine(Application.dataPath, "..", $"RPGMaker_Backup_{DateTime.Now:yyyyMMdd_HHmmss}");
+                backupPath = Path.Combine(projectRoot, $"RPGMaker_Backup_{DateTime.Now:yyyyMMdd_HHmmss}");
+            }
+            else
+            {
+                // Validate backup path is within project directory
+                backupPath = McpBridgeConstants.ValidateAndNormalizePath(backupPath, projectRoot);
             }
 
             var sourcePath = Path.Combine(Application.dataPath, "RPGMaker", "Storage");
@@ -1115,16 +688,25 @@ namespace MCP.Editor.Handlers.RPGMaker
         private object RestoreDatabase(Dictionary<string, object> payload)
         {
             var backupPath = GetString(payload, "backupPath");
+            var projectRoot = Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
 
-            if (string.IsNullOrEmpty(backupPath) || !Directory.Exists(backupPath))
+            if (string.IsNullOrEmpty(backupPath))
             {
-                throw new InvalidOperationException("Valid backup path is required.");
+                throw new InvalidOperationException("Backup path is required.");
+            }
+
+            // Validate backup path is within project directory
+            backupPath = McpBridgeConstants.ValidateAndNormalizePath(backupPath, projectRoot);
+
+            if (!Directory.Exists(backupPath))
+            {
+                throw new InvalidOperationException($"Backup path does not exist: '{backupPath}'.");
             }
 
             var targetPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage");
 
             // Create backup of current state before restore
-            var currentBackupPath = Path.Combine(Application.dataPath, "..", $"RPGMaker_PreRestore_{DateTime.Now:yyyyMMdd_HHmmss}");
+            var currentBackupPath = Path.Combine(projectRoot, $"RPGMaker_PreRestore_{DateTime.Now:yyyyMMdd_HHmmss}");
             if (Directory.Exists(targetPath))
             {
                 CopyDirectory(targetPath, currentBackupPath);

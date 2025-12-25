@@ -2,7 +2,9 @@
     "name": "RPGMakerMCP.Editor",
     "rootNamespace": "MCP.Editor",
     "references": [
-        "RPGMakerMCP.GameKit.Runtime"
+        "RPGMakerMCP.GameKit.Runtime",
+        "GUID:6dd6bba8a2e57b7409b6ff5b7390c1a1",
+        "GUID:64590166e5a3e9840be4e8858405a46d"
     ],
     "includePlatforms": [
         "Editor"

@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using RPGMaker.Codebase.Editor.Hierarchy;
+using Region = RPGMaker.Codebase.Editor.Hierarchy.Enum.Region;
 using UnityEditor;
 using UnityEngine;
 
@@ -697,16 +697,14 @@ namespace MCP.Editor.Handlers.RPGMaker
         {
             try
             {
-                var hierarchyType = Type.GetType("RPGMaker.Codebase.Editor.Hierarchy.Hierarchy, Assembly-CSharp-Editor");
-                if (hierarchyType != null)
+                if (Hierarchy.IsInitialized)
                 {
-                    var refreshMethod = hierarchyType.GetMethod("Refresh", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                    refreshMethod?.Invoke(null, null);
+                    _ = Hierarchy.Refresh(Region.Sound);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore if hierarchy refresh is not available
+                Debug.LogWarning($"Failed to refresh hierarchy: {ex.Message}");
             }
         }
 

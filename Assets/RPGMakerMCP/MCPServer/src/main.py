@@ -26,6 +26,7 @@ if str(_package_root) not in sys.path:
 
 from bridge.bridge_connector import bridge_connector
 from bridge.bridge_manager import bridge_manager
+from config.constants import mask_token, network
 from config.env import env
 from logger import logger
 from server.create_mcp_server import create_mcp_server
@@ -109,7 +110,8 @@ async def bridge_command_endpoint(request: Request) -> JSONResponse:
     payload = body.get("payload")
     timeout_ms = body.get("timeoutMs")
     resolved_timeout = (
-        timeout_ms if isinstance(timeout_ms, int) and timeout_ms > 0 else 30_000
+        timeout_ms if isinstance(timeout_ms, int) and timeout_ms > 0
+        else network.DEFAULT_COMMAND_TIMEOUT_MS
     )
 
     try:
@@ -157,8 +159,12 @@ async def mcp_ws_endpoint(websocket: WebSocket) -> None:
             await mcp_server.run(read_stream, write_stream, _create_init_options())
     except WebSocketDisconnect:
         logger.info("MCP client disconnected")
+    except ConnectionError as exc:
+        logger.warning("MCP client connection error: %s", exc)
+    except asyncio.CancelledError:
+        logger.debug("MCP client session cancelled")
     except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("Failed to serve MCP client: %s", exc)
+        logger.exception("Unexpected error serving MCP client: %s", exc)
     finally:
         with contextlib.suppress(Exception):
             await websocket.close()
@@ -174,7 +180,7 @@ async def startup() -> None:
         "Unity Bridge target: %s:%s (token=%s)",
         env.unity_bridge_host,
         env.unity_bridge_port,
-        "****" + env.bridge_token[-4:] if env.bridge_token and len(env.bridge_token) > 4 else ("set" if env.bridge_token else "not set"),
+        mask_token(env.bridge_token),
     )
     await editor_log_watcher.start()
     bridge_connector.start()

@@ -1,10 +1,12 @@
-# Unity-AI-Forge MCP Server
+# RPGMaker Unite MCP Server
 
-Model Context Protocol (MCP) server for Unity-AI-Forge - AI-powered Unity development toolkit.
+Model Context Protocol (MCP) server for RPGMaker Unite - AI-powered RPG development toolkit.
+
+**Version: 1.1.0**
 
 ## About
 
-This MCP server enables AI assistants to interact with Unity Editor through the Model Context Protocol, providing tools for scene manipulation, GameKit framework integration, and game development automation.
+This MCP server enables AI assistants to interact with RPGMaker Unite through the Model Context Protocol, providing 10 tools (8 RPGMaker-specific + 2 utility) for managing game data in real-time.
 
 ## Installation
 
@@ -17,37 +19,33 @@ For manual installation and detailed documentation, see:
 
 ## Features
 
-### Core Unity Tools
-- Scene hierarchy manipulation and build settings
-- GameObject creation with templates and batch operations
-- Component management with property updates
-- Asset management and ScriptableObject CRUD
-- Prefab workflow automation
-- Material and shader control
-- Project settings configuration
+### RPGMaker Tools (8 tools)
 
-### GameKit Framework (30 Tools Total)
-- **GameKitActor**: Player/NPC controllers with 8 behavior profiles and 4 control modes
-- **GameKitManager**: Resource/State/Turn/Event management with persistence
-- **GameKitUICommand**: UI button → Actor/Manager command bridge (11 command types)
-- **GameKitMachinations**: Economic system assets with flows/converters/triggers
-- **GameKitSceneFlow**: State machine-based scene transitions
-- **GameKitInteraction**: Trigger-based interactions with declarative actions
+| Tool | Description |
+|------|-------------|
+| `rpgmaker_database` | Characters, items, animations, system settings |
+| `rpgmaker_map` | Maps, map events, tilesets |
+| `rpgmaker_event` | Common events, event commands, pages |
+| `rpgmaker_battle` | Enemies, troops, skills, battle settings |
+| `rpgmaker_system` | Variables, switches, save data |
+| `rpgmaker_assets` | Images and sounds management |
+| `rpgmaker_gamestate` | Player, party, inventory, progress flags |
+| `rpgmaker_audio` | BGM/BGS/ME/SE playback and settings |
 
-### Declarative UI System
-- **UIHierarchy**: Create complex UI structures from JSON definitions
-- **UIState**: Define, save, and transition between UI states
-- **UINavigation**: Configure keyboard/gamepad navigation for UI elements
+### Utility Tools
 
-### Advanced Features
-- State persistence (save/load system)
-- Resource economics with Machinations-inspired flows
-- Batch operations with pattern matching
-- Design pattern generation (Singleton, ObjectPool, StateMachine, etc.)
-- Physics presets and camera rigs
-- Input system integration
-- Scene separation best practices
-- Compilation await for C# script operations
+| Tool | Description |
+|------|-------------|
+| `unity_ping` | Test connection to Unity bridge |
+| `unity_compilation_await` | Wait for Unity compilation to complete |
+
+### Key Features
+
+- **UUID-based Operations**: All CRUD operations use UUIDs for reliable data access
+- **Pagination Support**: All list operations support `offset` and `limit` parameters
+- **Path Validation**: Secure file operations with path traversal protection
+- **Token Security**: Secure token handling with log masking
+- **Improved Error Handling**: Specific exception types with helpful error messages
 
 ## Requirements
 
@@ -65,5 +63,5 @@ MIT License - See [LICENSE](../../LICENSE) file for details.
 
 ## Repository
 
-https://github.com/kuroyasouiti/Unity-AI-Forge
+https://github.com/kuroyasouiti/RPGMakerUnite
 

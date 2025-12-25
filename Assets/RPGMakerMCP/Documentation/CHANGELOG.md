@@ -9,6 +9,54 @@ RPGMaker Unite MCPのすべての注目すべき変更はこのファイルに�
 
 （なし）
 
+## [1.1.0] - 2025-12-25
+
+### 追加
+
+- **設定定数モジュール**
+  - Python: `config/constants.py` - ネットワーク、リトライ、セキュリティ設定を一元管理
+  - C#: `Config/McpBridgeConstants.cs` - タイムアウト、リトライ、パス検証設定
+
+- **トークンセキュリティ**
+  - `mask_token()` 関数でログ出力時のトークンマスキング
+  - Python/C#両方で統一されたマスキング形式
+
+- **パス検証**
+  - `ValidateAndNormalizePath()` でパストラバーサル攻撃を防止
+  - Export/Import/Backup/Restore操作でパス検証を実施
+
+- **統合テスト**
+  - `tests/test_error_scenarios.py` - エラーシナリオのテストスイート
+  - トークンマスキング、接続エラー、タイムアウト、パス検証テスト
+
+### 改善
+
+- **例外処理の強化**
+  - `bridge_connector.py`: 広範なException catchを特定型（ConnectionRefusedError, TimeoutError, OSError）に変更
+  - `main.py`: WebSocket接続エラーの詳細なハンドリング
+  - より有用なエラーメッセージとログ出力
+
+- **マジックナンバーの設定化**
+  - ハードコードされた値を設定ファイルに移動
+  - NetworkConfig: タイムアウト、メッセージサイズ、ping設定
+  - RetryConfig: リトライ回数、バックオフ遅延
+
+- **ドキュメント改善**
+  - `await_compilation()` のdocstring完成
+  - エラーメッセージの詳細化
+
+### 技術詳細
+
+- **新規ファイル**
+  - `MCPServer/src/config/constants.py`
+  - `MCPServer/tests/test_error_scenarios.py`
+  - `Editor/MCPBridge/Config/McpBridgeConstants.cs`
+
+- **変更ファイル**
+  - `MCPServer/src/main.py` - 例外処理改善、constants使用
+  - `MCPServer/src/bridge/bridge_connector.py` - 例外処理改善、constants使用
+  - `Editor/MCPBridge/Handlers/RPGMaker/RPGMakerDatabaseHandler.cs` - パス検証追加
+
 ## [1.0.0] - 2024-12-24
 
 ### 追加

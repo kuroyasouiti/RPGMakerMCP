@@ -1,6 +1,6 @@
 {
   "name": "com.rpgmakerunite.mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "RPGMaker Unite MCP",
   "description": "AI-powered development toolkit for RPGMaker Unite. MCP bridge with 10 tools for managing RPGMaker game data including database, maps, events, battles, system settings, assets, game state, and audio.",
   "unity": "2022.3",

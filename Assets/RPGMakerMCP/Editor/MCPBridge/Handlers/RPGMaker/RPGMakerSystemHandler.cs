@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using MCP.Editor.Base;
+using MCP.Editor.Services;
+using RPGMaker.Codebase.CoreSystem.Knowledge.DataModel.Flag;
 using UnityEditor;
 using UnityEngine;
 
@@ -11,11 +13,15 @@ namespace MCP.Editor.Handlers.RPGMaker
     /// <summary>
     /// RPGMaker system management handler.
     /// Handles operations for system settings, game variables, switches, and save data.
+    /// Uses EditorDataService for CRUD operations via the RPGMaker Editor API.
     /// </summary>
     public class RPGMakerSystemHandler : BaseCommandHandler
     {
         public override string Category => "rpgMakerSystem";
         public override string Version => "1.0.0";
+
+        // Access the EditorDataService singleton for system operations
+        private EditorDataService DataService => EditorDataService.Instance;
 
         public override IEnumerable<string> SupportedOperations => new[]
         {
@@ -75,6 +81,11 @@ namespace MCP.Editor.Handlers.RPGMaker
                 persistentDataPath = "unavailable (not on main thread)";
             }
 
+            // Load flags to get counts
+            var flags = DataService.LoadFlags();
+            var variableCount = flags?.variables?.Count ?? 0;
+            var switchCount = flags?.switches?.Count ?? 0;
+
             return CreateSuccessResponse(
                 ("bridgeVersion", "1.0.0"),
                 ("unityVersion", Application.unityVersion),
@@ -83,7 +94,8 @@ namespace MCP.Editor.Handlers.RPGMaker
                 ("flagsPath", flagsPath),
                 ("saveDataPath", saveDataPath),
                 ("systemFilesCount", Directory.Exists(systemPath) ? Directory.GetFiles(systemPath, "*.json").Length : 0),
-                ("flagsFilesCount", Directory.Exists(flagsPath) ? Directory.GetFiles(flagsPath, "*.json").Length : 0),
+                ("variableCount", variableCount),
+                ("switchCount", switchCount),
                 ("saveDataFilesCount", Directory.Exists(saveDataPath) ? Directory.GetFiles(saveDataPath, "*.json").Length : 0),
                 ("platform", Application.platform.ToString()),
                 ("dataPath", Application.dataPath),
@@ -100,54 +112,60 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object GetGameVariables()
         {
-            var flagsPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Flags", "JSON", "variables.json");
-
-            if (!File.Exists(flagsPath))
+            var flags = DataService.LoadFlags();
+            var variables = flags?.variables?.Select(v => new Dictionary<string, object>
             {
-                return CreateSuccessResponse(("variables", new Dictionary<string, object>()), ("message", "No variables file found."));
-            }
+                ["id"] = v.id,
+                ["name"] = v.name ?? "Unnamed Variable",
+                ["eventCount"] = v.events?.Count ?? 0
+            }).ToList() ?? new List<Dictionary<string, object>>();
 
-            var content = File.ReadAllText(flagsPath);
-            var variables = MiniJson.Deserialize(content);
-
-            return CreateSuccessResponse(("variables", variables));
+            return CreateSuccessResponse(
+                ("variables", variables),
+                ("count", variables.Count)
+            );
         }
 
         private object SetGameVariable(Dictionary<string, object> payload)
         {
             var variableId = GetString(payload, "variableId");
-            object value = null;
-            if (payload.TryGetValue("value", out var v))
-            {
-                value = v;
-            }
+            var name = GetString(payload, "name");
 
             if (string.IsNullOrEmpty(variableId))
             {
-                throw new InvalidOperationException("Variable ID is required.");
+                // Create a new variable if no ID is provided
+                if (string.IsNullOrEmpty(name))
+                {
+                    throw new InvalidOperationException("Variable ID or name is required.");
+                }
+
+                var newVariable = DataService.CreateVariable(name);
+                return CreateSuccessResponse(
+                    ("id", newVariable.id),
+                    ("name", newVariable.name),
+                    ("message", "Variable created successfully.")
+                );
             }
 
-            var flagsPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Flags", "JSON", "variables.json");
-            Dictionary<string, object> variables;
-
-            if (File.Exists(flagsPath))
+            // Update existing variable
+            var variable = DataService.GetVariableById(variableId);
+            if (variable == null)
             {
-                var content = File.ReadAllText(flagsPath);
-                variables = MiniJson.Deserialize(content) as Dictionary<string, object> ?? new Dictionary<string, object>();
+                throw new InvalidOperationException($"Variable with ID '{variableId}' not found.");
             }
-            else
+
+            DataService.UpdateVariable(variableId, v =>
             {
-                variables = new Dictionary<string, object>();
-                Directory.CreateDirectory(Path.GetDirectoryName(flagsPath));
-            }
+                if (!string.IsNullOrEmpty(name))
+                {
+                    v.name = name;
+                }
+            });
 
-            variables[variableId] = value;
-            File.WriteAllText(flagsPath, MiniJson.Serialize(variables));
-
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Variable '{variableId}' set successfully."));
+            return CreateSuccessResponse(
+                ("id", variableId),
+                ("message", "Variable updated successfully.")
+            );
         }
 
         #endregion
@@ -156,50 +174,60 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object GetSwitches()
         {
-            var flagsPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Flags", "JSON", "switches.json");
-
-            if (!File.Exists(flagsPath))
+            var flags = DataService.LoadFlags();
+            var switches = flags?.switches?.Select(s => new Dictionary<string, object>
             {
-                return CreateSuccessResponse(("switches", new Dictionary<string, object>()), ("message", "No switches file found."));
-            }
+                ["id"] = s.id,
+                ["name"] = s.name ?? "Unnamed Switch",
+                ["eventCount"] = s.events?.Count ?? 0
+            }).ToList() ?? new List<Dictionary<string, object>>();
 
-            var content = File.ReadAllText(flagsPath);
-            var switches = MiniJson.Deserialize(content);
-
-            return CreateSuccessResponse(("switches", switches));
+            return CreateSuccessResponse(
+                ("switches", switches),
+                ("count", switches.Count)
+            );
         }
 
         private object SetSwitch(Dictionary<string, object> payload)
         {
             var switchId = GetString(payload, "switchId");
-            var value = GetBool(payload, "value");
+            var name = GetString(payload, "name");
 
             if (string.IsNullOrEmpty(switchId))
             {
-                throw new InvalidOperationException("Switch ID is required.");
+                // Create a new switch if no ID is provided
+                if (string.IsNullOrEmpty(name))
+                {
+                    throw new InvalidOperationException("Switch ID or name is required.");
+                }
+
+                var newSwitch = DataService.CreateSwitch(name);
+                return CreateSuccessResponse(
+                    ("id", newSwitch.id),
+                    ("name", newSwitch.name),
+                    ("message", "Switch created successfully.")
+                );
             }
 
-            var flagsPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "Flags", "JSON", "switches.json");
-            Dictionary<string, object> switches;
-
-            if (File.Exists(flagsPath))
+            // Update existing switch
+            var switchData = DataService.GetSwitchById(switchId);
+            if (switchData == null)
             {
-                var content = File.ReadAllText(flagsPath);
-                switches = MiniJson.Deserialize(content) as Dictionary<string, object> ?? new Dictionary<string, object>();
+                throw new InvalidOperationException($"Switch with ID '{switchId}' not found.");
             }
-            else
+
+            DataService.UpdateSwitch(switchId, s =>
             {
-                switches = new Dictionary<string, object>();
-                Directory.CreateDirectory(Path.GetDirectoryName(flagsPath));
-            }
+                if (!string.IsNullOrEmpty(name))
+                {
+                    s.name = name;
+                }
+            });
 
-            switches[switchId] = value;
-            File.WriteAllText(flagsPath, MiniJson.Serialize(switches));
-
-            AssetDatabase.Refresh();
-            RefreshHierarchy();
-
-            return CreateSuccessResponse(("message", $"Switch '{switchId}' set to {value}."));
+            return CreateSuccessResponse(
+                ("id", switchId),
+                ("message", "Switch updated successfully.")
+            );
         }
 
         #endregion
@@ -208,31 +236,18 @@ namespace MCP.Editor.Handlers.RPGMaker
 
         private object GetSystemSettings()
         {
-            var systemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "System");
-            if (!Directory.Exists(systemPath))
+            var settings = DataService.LoadSystemSettings();
+            if (settings == null)
             {
-                return CreateSuccessResponse(("settings", new Dictionary<string, object>()), ("message", "No system settings found."));
+                return CreateSuccessResponse(
+                    ("settings", new Dictionary<string, object>()),
+                    ("message", "No system settings found.")
+                );
             }
 
-            var systemFiles = Directory.GetFiles(systemPath, "*.json");
-            var settings = new Dictionary<string, object>();
-
-            foreach (var file in systemFiles)
-            {
-                try
-                {
-                    var content = File.ReadAllText(file);
-                    var settingData = MiniJson.Deserialize(content);
-                    var filename = Path.GetFileNameWithoutExtension(file);
-                    settings[filename] = settingData;
-                }
-                catch (Exception ex)
-                {
-                    Debug.LogWarning($"Failed to parse system file {file}: {ex.Message}");
-                }
-            }
-
-            return CreateSuccessResponse(("settings", settings));
+            return CreateSuccessResponse(
+                ("settings", DataModelMapper.ToDict(settings))
+            );
         }
 
         private object UpdateSystemSettings(Dictionary<string, object> payload)
@@ -244,34 +259,12 @@ namespace MCP.Editor.Handlers.RPGMaker
                 throw new InvalidOperationException("System settings are required.");
             }
 
-            var filename = systemSettings.ContainsKey("filename") ? systemSettings["filename"]?.ToString() : null;
-            var settingData = systemSettings.ContainsKey("settingData")
-                ? systemSettings["settingData"] as Dictionary<string, object>
-                : null;
-
-            var systemPath = Path.Combine(Application.dataPath, "RPGMaker", "Storage", "System");
-            Directory.CreateDirectory(systemPath);
-
-            if (!string.IsNullOrEmpty(filename) && settingData != null)
+            DataService.UpdateSystemSettings(settings =>
             {
-                var filePath = Path.Combine(systemPath, $"{filename}.json");
-                File.WriteAllText(filePath, MiniJson.Serialize(settingData));
+                DataModelMapper.ApplyPartialUpdate(settings, systemSettings);
+            });
 
-                AssetDatabase.Refresh();
-                RefreshHierarchy();
-
-                return CreateSuccessResponse(("message", $"System setting '{filename}' updated successfully."));
-            }
-            else
-            {
-                var filePath = Path.Combine(systemPath, "GameSettings.json");
-                File.WriteAllText(filePath, MiniJson.Serialize(systemSettings));
-
-                AssetDatabase.Refresh();
-                RefreshHierarchy();
-
-                return CreateSuccessResponse(("message", "System settings updated successfully."));
-            }
+            return CreateSuccessResponse(("message", "System settings updated successfully."));
         }
 
         #endregion
@@ -297,7 +290,7 @@ namespace MCP.Editor.Handlers.RPGMaker
                 }
 
                 var content = File.ReadAllText(filePath);
-                var saveData = MiniJson.Deserialize(content);
+                var saveData = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(content);
                 return CreateSuccessResponse(("saveData", saveData), ("slotId", slotId));
             }
             else
@@ -310,7 +303,7 @@ namespace MCP.Editor.Handlers.RPGMaker
                     try
                     {
                         var content = File.ReadAllText(file);
-                        var saveData = MiniJson.Deserialize(content);
+                        var saveData = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(content);
                         saveDataList.Add(new Dictionary<string, object>
                         {
                             ["filename"] = Path.GetFileNameWithoutExtension(file),
@@ -349,10 +342,10 @@ namespace MCP.Editor.Handlers.RPGMaker
             Directory.CreateDirectory(saveDataPath);
 
             var filePath = Path.Combine(saveDataPath, $"save_{slotId}.json");
-            File.WriteAllText(filePath, MiniJson.Serialize(saveData));
+            var json = Newtonsoft.Json.JsonConvert.SerializeObject(saveData, Newtonsoft.Json.Formatting.Indented);
+            File.WriteAllText(filePath, json);
 
             AssetDatabase.Refresh();
-            RefreshHierarchy();
 
             return CreateSuccessResponse(("message", $"Save data for slot '{slotId}' created successfully."));
         }
@@ -375,7 +368,7 @@ namespace MCP.Editor.Handlers.RPGMaker
             }
 
             var content = File.ReadAllText(filePath);
-            var saveData = MiniJson.Deserialize(content);
+            var saveData = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(content);
 
             return CreateSuccessResponse(
                 ("saveData", saveData),
@@ -403,7 +396,6 @@ namespace MCP.Editor.Handlers.RPGMaker
 
             File.Delete(filePath);
             AssetDatabase.Refresh();
-            RefreshHierarchy();
 
             return CreateSuccessResponse(("message", $"Save data for slot '{slotId}' deleted successfully."));
         }
@@ -419,33 +411,6 @@ namespace MCP.Editor.Handlers.RPGMaker
                 return value as T;
             }
             return null;
-        }
-
-        private bool GetBool(Dictionary<string, object> payload, string key, bool defaultValue = false)
-        {
-            if (payload != null && payload.TryGetValue(key, out var value))
-            {
-                if (value is bool boolVal) return boolVal;
-                if (bool.TryParse(value?.ToString(), out var parsed)) return parsed;
-            }
-            return defaultValue;
-        }
-
-        private void RefreshHierarchy()
-        {
-            try
-            {
-                var hierarchyType = Type.GetType("RPGMaker.Codebase.Editor.Hierarchy.Hierarchy, Assembly-CSharp-Editor");
-                if (hierarchyType != null)
-                {
-                    var refreshMethod = hierarchyType.GetMethod("Refresh", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-                    refreshMethod?.Invoke(null, null);
-                }
-            }
-            catch
-            {
-                // Ignore if hierarchy refresh is not available
-            }
         }
 
         #endregion
